@@ -1,0 +1,14 @@
+Conectando a la base de datos...
+OK: ALTER TABLE alergias ADD COLUMN IF NOT EXISTS descripcion TEXT;
+OK: ALTER TABLE alergias ADD COLUMN IF NOT EXISTS reaccion TEXT;
+OK: ALTER TABLE medicaciones DROP COLUMN IF EXISTS nombre_medicacion;
+OK: ALTER TABLE medicaciones ADD COLUMN IF NOT EXISTS nombre_medicamento VARCHAR(255);
+OK: ALTER TABLE medicaciones ADD COLUMN IF NOT EXISTS duracion VARCHAR(100);
+OK: ALTER TABLE medicaciones ADD COLUMN IF NOT EXISTS indicacion TEXT;
+OK: ALTER TABLE lesiones_deportivas DROP COLUMN IF EXISTS descripcion;
+OK: ALTER TABLE lesiones_deportivas DROP COLUMN IF EXISTS fecha_ultima_lesion;
+OK: ALTER TABLE lesiones_deportivas ADD COLUMN IF NOT EXISTS tipo_lesion VARCHAR(255);
+OK: ALTER TABLE lesiones_deportivas ADD COLUMN IF NOT EXISTS fecha_lesion DATE;
+OK: ALTER TABLE lesiones_deportivas ADD COLUMN IF NOT EXISTS tratamiento TEXT;
+
+Migracion completada correctamente!

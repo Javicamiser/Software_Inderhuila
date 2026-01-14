@@ -1,0 +1,132 @@
+/* Estilos personalizados para react-big-calendar */
+
+.rbc-calendar {
+  font-family: inherit;
+}
+
+.rbc-header {
+  padding: 10px 3px;
+  font-weight: 600;
+  color: #1F4788;
+  border-bottom: 2px solid #1F4788;
+  background-color: #f8f9fa;
+}
+
+.rbc-today {
+  background-color: #fff4e6;
+}
+
+.rbc-event {
+  padding: 2px 5px;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.rbc-event:hover {
+  opacity: 0.8;
+}
+
+.rbc-event-label {
+  font-size: 0.75rem;
+}
+
+.rbc-toolbar {
+  padding: 15px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rbc-toolbar button {
+  color: #374151;
+  border: 1px solid #d1d5db;
+  background-color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f3f4f6;
+  border-color: #1F4788;
+}
+
+.rbc-toolbar button:active,
+.rbc-toolbar button.rbc-active {
+  background-color: #1F4788;
+  color: white;
+  border-color: #1F4788;
+}
+
+.rbc-toolbar button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.2);
+}
+
+.rbc-month-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-day-bg {
+  border-left: 1px solid #e5e7eb;
+}
+
+.rbc-date-cell {
+  padding: 5px;
+  text-align: right;
+}
+
+.rbc-off-range {
+  color: #9ca3af;
+}
+
+.rbc-off-range-bg {
+  background-color: #f9fafb;
+}
+
+.rbc-current {
+  color: #C84F3B;
+  font-weight: 700;
+}
+
+.rbc-show-more {
+  background-color: rgba(31, 71, 136, 0.1);
+  color: #1F4788;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.rbc-show-more:hover {
+  background-color: rgba(31, 71, 136, 0.2);
+}
+
+/* Estilos personalizados para el scrollbar de la lista de citas */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Para Firefox */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
