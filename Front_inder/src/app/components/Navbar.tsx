@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, Dispatch, SetStateAction } from 'react';
 import {
   Menu,
@@ -27,7 +25,7 @@ export default function Navbar({ onNavigate, currentView }: NavbarProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
-  const user = typeof window !== 'undefined' 
+  const user = typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('user') || '{}')
     : {};
 

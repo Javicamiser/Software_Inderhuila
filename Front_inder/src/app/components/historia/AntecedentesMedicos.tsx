@@ -3,7 +3,7 @@ import { HistoriaClinicaData } from "../HistoriaClinica";
 import ComponenteAlergias from './ComponenteAlergias';
 import VacunasHistoriaClinica from '../VacunasHistoriaClinica';
 import { ChevronRight, ChevronLeft, Plus, Trash2, User, Users, AlertCircle } from "lucide-react";
-import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre } from "./cie11Database";
+import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre, buscarPorCodigoParcial } from "./cie11Database";
 
 type Props = {
   data: HistoriaClinicaData;
@@ -33,6 +33,8 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
   const [errorCodigoPersonal, setErrorCodigoPersonal] = useState("");
   const [sugerenciasPersonales, setSugerenciasPersonales] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [mostrarSugerenciasPersonales, setMostrarSugerenciasPersonales] = useState(false);
+  const [sugerenciasCodigoPersonal, setSugerenciasCodigoPersonal] = useState<Array<{ codigo: string; nombre: string }>>([]);
+  const [mostrarSugerenciasCodigoPersonal, setMostrarSugerenciasCodigoPersonal] = useState(false);
 
   const [nuevoCodigoFamiliar, setNuevoCodigoFamiliar] = useState("");
   const [nuevoNombreFamiliar, setNuevoNombreFamiliar] = useState("");
@@ -41,6 +43,8 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
   const [errorCodigoFamiliar, setErrorCodigoFamiliar] = useState("");
   const [sugerenciasFamiliares, setSugerenciasFamiliares] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [mostrarSugerenciasFamiliares, setMostrarSugerenciasFamiliares] = useState(false);
+  const [sugerenciasCodigoFamiliar, setSugerenciasCodigoFamiliar] = useState<Array<{ codigo: string; nombre: string }>>([]);
+  const [mostrarSugerenciasCodigoFamiliar, setMostrarSugerenciasCodigoFamiliar] = useState(false);
 
   const handleCodigoPersonalChange = (codigo: string) => {
     const codigoUpper = codigo.toUpperCase();
@@ -48,16 +52,31 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoPersonal("");
 
     if (codigoUpper.trim()) {
+      // Primero buscar coincidencia exacta
       const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
       if (enfermedad) {
         setNuevoNombrePersonal(enfermedad);
         setErrorCodigoPersonal("");
+        setSugerenciasCodigoPersonal([]);
+        setMostrarSugerenciasCodigoPersonal(false);
       } else {
-        setErrorCodigoPersonal("Código CIE-11 no encontrado");
+        // Si no hay coincidencia exacta, buscar por código parcial
+        const resultados = buscarPorCodigoParcial(codigoUpper);
+        if (resultados.length > 0) {
+          setSugerenciasCodigoPersonal(resultados);
+          setMostrarSugerenciasCodigoPersonal(true);
+          setErrorCodigoPersonal("");
+        } else {
+          setErrorCodigoPersonal("Código CIE-11 no encontrado");
+          setSugerenciasCodigoPersonal([]);
+          setMostrarSugerenciasCodigoPersonal(false);
+        }
         setNuevoNombrePersonal("");
       }
     } else {
       setNuevoNombrePersonal("");
+      setSugerenciasCodigoPersonal([]);
+      setMostrarSugerenciasCodigoPersonal(false);
     }
   };
 
@@ -87,16 +106,31 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoFamiliar("");
 
     if (codigoUpper.trim()) {
+      // Primero buscar coincidencia exacta
       const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
       if (enfermedad) {
         setNuevoNombreFamiliar(enfermedad);
         setErrorCodigoFamiliar("");
+        setSugerenciasCodigoFamiliar([]);
+        setMostrarSugerenciasCodigoFamiliar(false);
       } else {
-        setErrorCodigoFamiliar("Código CIE-11 no encontrado");
+        // Si no hay coincidencia exacta, buscar por código parcial
+        const resultados = buscarPorCodigoParcial(codigoUpper);
+        if (resultados.length > 0) {
+          setSugerenciasCodigoFamiliar(resultados);
+          setMostrarSugerenciasCodigoFamiliar(true);
+          setErrorCodigoFamiliar("");
+        } else {
+          setErrorCodigoFamiliar("Código CIE-11 no encontrado");
+          setSugerenciasCodigoFamiliar([]);
+          setMostrarSugerenciasCodigoFamiliar(false);
+        }
         setNuevoNombreFamiliar("");
       }
     } else {
       setNuevoNombreFamiliar("");
+      setSugerenciasCodigoFamiliar([]);
+      setMostrarSugerenciasCodigoFamiliar(false);
     }
   };
 
@@ -146,6 +180,8 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoPersonal("");
     setSugerenciasPersonales([]);
     setMostrarSugerenciasPersonales(false);
+    setSugerenciasCodigoPersonal([]);
+    setMostrarSugerenciasCodigoPersonal(false);
   };
 
   const handleAgregarFamiliar = () => {
@@ -180,6 +216,8 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoFamiliar("");
     setSugerenciasFamiliares([]);
     setMostrarSugerenciasFamiliares(false);
+    setSugerenciasCodigoFamiliar([]);
+    setMostrarSugerenciasCodigoFamiliar(false);
   };
 
   const handleEliminarPersonal = (index: number) => {
@@ -203,7 +241,7 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
 
         <div className="bg-white p-4 rounded-lg space-y-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+            <div className="relative">
               <label className="block mb-2 text-sm font-medium text-gray-700">
                 Código CIE-11 <span className="text-red-500">*</span>
               </label>
@@ -211,6 +249,11 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                 type="text"
                 value={nuevoCodigoPersonal}
                 onChange={(e) => handleCodigoPersonalChange(e.target.value)}
+                onFocus={() => {
+                  if (sugerenciasCodigoPersonal.length > 0) {
+                    setMostrarSugerenciasCodigoPersonal(true);
+                  }
+                }}
                 placeholder="Ej: BA00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
               />
@@ -218,6 +261,29 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                 <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                   <AlertCircle className="w-4 h-4" />
                   <span>{errorCodigoPersonal}</span>
+                </div>
+              )}
+              {mostrarSugerenciasCodigoPersonal && sugerenciasCodigoPersonal.length > 0 && (
+                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                  {sugerenciasCodigoPersonal.map((sugerencia) => (
+                    <div
+                      key={sugerencia.codigo}
+                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      onClick={() => {
+                        setNuevoCodigoPersonal(sugerencia.codigo);
+                        setNuevoNombrePersonal(sugerencia.nombre);
+                        setMostrarSugerenciasCodigoPersonal(false);
+                        setErrorCodigoPersonal("");
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                          {sugerencia.codigo}
+                        </span>
+                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -336,7 +402,7 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
 
         <div className="bg-white p-4 rounded-lg space-y-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+            <div className="relative">
               <label className="block mb-2 text-sm font-medium text-gray-700">
                 Código CIE-11 <span className="text-red-500">*</span>
               </label>
@@ -344,6 +410,11 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                 type="text"
                 value={nuevoCodigoFamiliar}
                 onChange={(e) => handleCodigoFamiliarChange(e.target.value)}
+                onFocus={() => {
+                  if (sugerenciasCodigoFamiliar.length > 0) {
+                    setMostrarSugerenciasCodigoFamiliar(true);
+                  }
+                }}
                 placeholder="Ej: BA00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#B8C91A] uppercase"
               />
@@ -351,6 +422,29 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                 <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                   <AlertCircle className="w-4 h-4" />
                   <span>{errorCodigoFamiliar}</span>
+                </div>
+              )}
+              {mostrarSugerenciasCodigoFamiliar && sugerenciasCodigoFamiliar.length > 0 && (
+                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                  {sugerenciasCodigoFamiliar.map((sugerencia) => (
+                    <div
+                      key={sugerencia.codigo}
+                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      onClick={() => {
+                        setNuevoCodigoFamiliar(sugerencia.codigo);
+                        setNuevoNombreFamiliar(sugerencia.nombre);
+                        setMostrarSugerenciasCodigoFamiliar(false);
+                        setErrorCodigoFamiliar("");
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                          {sugerencia.codigo}
+                        </span>
+                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

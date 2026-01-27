@@ -11,6 +11,7 @@ from app.models.antecedentes import (
     RevisionSistemas, SignosVitales, PruebasComplementarias,
     Diagnosticos, PlanTratamiento, RemisionesEspecialistas
 )
+from app.models.token_descarga import TokenDescarga
 
 __all__ = [
     "Deportista",
@@ -37,5 +38,6 @@ __all__ = [
     "PruebasComplementarias",
     "Diagnosticos",
     "PlanTratamiento",
-    "RemisionesEspecialistas"
+    "RemisionesEspecialistas",
+    "TokenDescarga"
 ]
