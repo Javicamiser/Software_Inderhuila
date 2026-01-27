@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Search, ArrowLeft, User, Calendar, FileText } from 'lucide-react';
-import { deportistasService, Deportista } from '../../app/services/apiClient';
+import { Search, ArrowLeft, User, Calendar, FileText, Eye } from 'lucide-react';
+import { deportistasService, historiaClinicaService, Deportista } from '../../app/services/apiClient';
 import { DeportistasConCitasHoy } from './DeportistasConCitasHoy';
 
 // ============================================================================
@@ -9,8 +9,14 @@ import { DeportistasConCitasHoy } from './DeportistasConCitasHoy';
 
 interface SelectDeportistaProps {
   onSelect: (deportista: Deportista) => void;
+  onViewHistoria?: (deportista: Deportista, historiaId: string) => void;
   onBack?: () => void;
   onError?: (error: string) => void;
+}
+
+interface DeportistaConHistoria extends Deportista {
+  tieneHistoria?: boolean;
+  historiaId?: string;
 }
 
 // ============================================================================
@@ -19,14 +25,52 @@ interface SelectDeportistaProps {
 
 export const SelectDeportista: React.FC<SelectDeportistaProps> = ({
   onSelect,
+  onViewHistoria,
   onBack,
   onError,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [deportistas, setDeportistas] = useState<Deportista[]>([]);
+  const [deportistas, setDeportistas] = useState<DeportistaConHistoria[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Verificar si un deportista tiene historia clínica
+  const verificarHistoriaClinica = async (deportistaId: string) => {
+    try {
+      const response = await historiaClinicaService.getAll(1, 100);
+      
+      // Normalizar respuesta a array
+      let historias: any[] = [];
+      const res = response as any;
+      
+      if (Array.isArray(res)) {
+        historias = res;
+      } else if (res && res.items && Array.isArray(res.items)) {
+        historias = res.items;
+      } else if (res && res.results && Array.isArray(res.results)) {
+        historias = res.results;
+      } else if (res && res.data && Array.isArray(res.data)) {
+        historias = res.data;
+      }
+
+      // Buscar si existe una historia para este deportista
+      const historiaExistente = historias.find((h: any) => 
+        h.deportista_id === deportistaId || 
+        h.deportistaId === deportistaId ||
+        (h.deportista && h.deportista.id === deportistaId)
+      );
+
+      if (historiaExistente) {
+        return { tiene: true, historiaId: historiaExistente.id as string };
+      }
+
+      return { tiene: false, historiaId: undefined };
+    } catch (error) {
+      console.error('Error verificando historia clínica:', error);
+      return { tiene: false, historiaId: undefined };
+    }
+  };
 
   // Buscar deportistas
   const handleSearch = useCallback(async (query: string) => {
@@ -43,7 +87,20 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({
       setErrorMessage('');
 
       const results = await deportistasService.search(query);
-      setDeportistas(results);
+      
+      // Verificar historia clínica para cada deportista encontrado
+      const deportistasConHistoria: DeportistaConHistoria[] = await Promise.all(
+        results.map(async (deportista: Deportista) => {
+          const verificacion = await verificarHistoriaClinica(deportista.id);
+          return {
+            ...deportista,
+            tieneHistoria: verificacion.tiene,
+            historiaId: verificacion.historiaId,
+          };
+        })
+      );
+
+      setDeportistas(deportistasConHistoria);
 
       if (results.length === 0) {
         setErrorMessage('No se encontraron deportistas');
@@ -84,6 +141,19 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({
     }
 
     return edad;
+  };
+
+  // Manejar click en deportista
+  const handleDeportistaClick = (deportista: DeportistaConHistoria) => {
+    if (deportista.tieneHistoria && deportista.historiaId) {
+      if (onViewHistoria) {
+        onViewHistoria(deportista, deportista.historiaId);
+      } else {
+        alert(`El deportista ${deportista.nombres} ${deportista.apellidos} ya tiene una historia clínica registrada.`);
+      }
+    } else {
+      onSelect(deportista);
+    }
   };
 
   // Obtener la fecha de hoy
@@ -168,22 +238,43 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({
               {deportistas.map((deportista) => (
                 <div
                   key={deportista.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group"
-                  onClick={() => onSelect(deportista)}
+                  className={`border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group ${
+                    deportista.tieneHistoria 
+                      ? 'border-green-300 bg-green-50/30 hover:border-green-500' 
+                      : 'border-gray-200 hover:border-blue-400'
+                  }`}
+                  onClick={() => handleDeportistaClick(deportista)}
                 >
                   <div className="flex items-center gap-4">
                     {/* Foto */}
                     <div className="flex-shrink-0">
-                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">
-                        <User className="w-8 h-8 text-gray-400" />
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 ${
+                        deportista.tieneHistoria 
+                          ? 'bg-green-100 border-green-300' 
+                          : 'bg-gray-100 border-gray-200'
+                      }`}>
+                        <User className={`w-8 h-8 ${
+                          deportista.tieneHistoria ? 'text-green-500' : 'text-gray-400'
+                        }`} />
                       </div>
                     </div>
 
                     {/* Información */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-gray-900 font-semibold truncate group-hover:text-blue-600 transition-colors">
-                        {deportista.nombres} {deportista.apellidos}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`font-semibold truncate transition-colors ${
+                          deportista.tieneHistoria 
+                            ? 'text-green-800 group-hover:text-green-600' 
+                            : 'text-gray-900 group-hover:text-blue-600'
+                        }`}>
+                          {deportista.nombres} {deportista.apellidos}
+                        </h3>
+                        {deportista.tieneHistoria && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                            Historia registrada
+                          </span>
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-2 text-gray-600 text-sm">
                         <div className="flex items-center gap-1">
                           <span className="text-gray-500">Doc:</span>
@@ -206,16 +297,29 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({
 
                     {/* Botón de acción */}
                     <div className="flex-shrink-0">
-                      <button
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelect(deportista);
-                        }}
-                      >
-                        <FileText className="w-4 h-4" />
-                        <span>Iniciar Historia</span>
-                      </button>
+                      {deportista.tieneHistoria ? (
+                        <button
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeportistaClick(deportista);
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>Ver Historia</span>
+                        </button>
+                      ) : (
+                        <button
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(deportista);
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Iniciar Historia</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

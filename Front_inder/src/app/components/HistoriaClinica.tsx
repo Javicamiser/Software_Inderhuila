@@ -116,6 +116,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [historiaGuardadaId, setHistoriaGuardadaId] = useState<string | null>(null);
   const [formData, setFormData] = useState<HistoriaClinicaData>({
     tipoCita: "",
     motivoConsulta: "",
@@ -239,39 +240,46 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
       console.log("✅ Historia clínica guardada, respuesta:", response);
       toast.success("Historia clínica guardada correctamente");
       
-      // Método 1: Emitir evento INMEDIATAMENTE para refrescar las citas
+      // Guardar el ID de la historia para poder descargar PDF después
+      setHistoriaGuardadaId(response.historia_clinica_id || response.id);
+      
+      // Emitir evento para refrescar las citas
       console.log("🚀 Emitiendo evento 'citasActualizadas'...");
       window.dispatchEvent(new CustomEvent('citasActualizadas', { 
-        detail: { deportista_id: deportista.id, historia_id: response.id } 
+        detail: { deportista_id: deportista.id, historia_id: response.historia_clinica_id || response.id } 
       }));
       console.log("🚀 ✅ Evento emitido");
       
-      // Método 2: Guardar en localStorage como backup (mejor comunicación entre ventanas/contextos)
+      // Guardar en localStorage como backup
       const timestamp = new Date().toISOString();
       console.log("💾 Guardando en localStorage: citasActualizadas_timestamp =", timestamp);
       localStorage.setItem('citasActualizadas_timestamp', timestamp);
       localStorage.setItem('citasActualizadas_deportista', deportista.id);
       
-      // Ofrecer descargar PDF inmediatamente después de guardar
+      // Llamar callback de éxito
+      onSuccess?.(response.historia_clinica_id || response.id);
+      
+      // Volver a la vista anterior después de un breve delay
       setTimeout(() => {
-        if (confirm("¿Deseas descargar el documento médico en PDF?")) {
-          descargarDocumentoPDF(response.id);
-        }
-        
-        // Llamar callbacks y cerrar la vista
-        onSuccess?.(response.id);
-        
-        // Esperar a que se descargue el PDF (si es que lo descargó) y luego cerrar
-        setTimeout(() => {
-          onBack?.();
-        }, 500);
-      }, 500);
+        onBack?.();
+      }, 1000);
+      
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Error desconocido";
       toast.error(`Error al guardar la historia clínica: ${errorMsg}`);
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Función separada para imprimir/generar PDF manualmente
+  const handlePrint = () => {
+    if (historiaGuardadaId) {
+      descargarDocumentoPDF(historiaGuardadaId);
+    } else {
+      // Si no hay historia guardada, usar window.print()
+      window.print();
     }
   };
 
@@ -362,7 +370,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
               onSave={handleSubmit}
               onPrevious={handlePrevious}
               onCancel={handleCancel}
-              onPrint={() => window.print()}
+              onPrint={handlePrint}
             />
           )}
         </div>

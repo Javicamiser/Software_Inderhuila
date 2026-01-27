@@ -175,3 +175,26 @@ export function buscarCodigosPorNombre(nombre: string): Array<{ codigo: string; 
   
   return resultados;
 }
+
+export function buscarPorCodigoParcial(codigo: string): Array<{ codigo: string; nombre: string }> {
+  const codigoNormalizado = codigo.toUpperCase().trim();
+  const resultados: Array<{ codigo: string; nombre: string }> = [];
+  
+  for (const [cod, nombreEnfermedad] of Object.entries(CIE11_DATABASE)) {
+    if (cod.startsWith(codigoNormalizado)) {
+      resultados.push({ codigo: cod, nombre: nombreEnfermedad });
+    }
+  }
+  
+  return resultados;
+}
+
+export function obtenerTodosLosCodigos(): Array<{ codigo: string; nombre: string }> {
+  const resultados: Array<{ codigo: string; nombre: string }> = [];
+  
+  for (const [codigo, nombre] of Object.entries(CIE11_DATABASE)) {
+    resultados.push({ codigo, nombre });
+  }
+  
+  return resultados.sort((a, b) => a.codigo.localeCompare(b.codigo));
+}

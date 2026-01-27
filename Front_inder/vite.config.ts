@@ -5,15 +5,19 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    port: 5173,
+    // Configuración para que el servidor acepte conexiones externas
+    host: true,
+  },
+  // Indicar que es una SPA para que Vite sirva index.html en rutas no encontradas
+  appType: 'spa',
 })
