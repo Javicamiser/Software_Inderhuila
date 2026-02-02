@@ -239,24 +239,6 @@ export function RevisionSistemas({ data, updateData, onNext, onPrevious, onCance
           )}
         </div>
       </div>
-
-      {/* Botones de navegación */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
-        <button
-          onClick={onPrevious}
-          className="flex-1 flex items-center justify-center gap-2 bg-gray-300 text-gray-700 py-3 px-6 rounded-md hover:bg-gray-400 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Anterior
-        </button>
-        <button
-          onClick={handleNext}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Siguiente
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
     </div>
   );
 }

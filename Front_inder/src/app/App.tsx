@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { CatalogosProvider } from "./contexts/CatalogosContext";
-import Navbar from "./components/Navbar";
+import MedicalLayout from "./MedicalLayout";
 import { Inicio } from "./components/Inicio";
 import { RegistroDeportista } from "./components/RegistroDeportista";
 import { HistoriaClinica } from "./components/HistoriaClinica";
@@ -125,7 +125,7 @@ export default function App() {
     }
   };
 
-  // Si es página de descarga, mostrar sin Navbar
+  // Si es página de descarga, mostrar sin MedicalLayout
   if (currentView === "descargar" && downloadToken) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -136,10 +136,9 @@ export default function App() {
 
   return (
     <CatalogosProvider>
-      <div className="min-h-screen bg-slate-50">
-        <Navbar onNavigate={setCurrentView} currentView={currentView} />
+      <MedicalLayout currentView={currentView} onNavigate={setCurrentView}>
         {renderView()}
-      </div>
+      </MedicalLayout>
     </CatalogosProvider>
   );
 }

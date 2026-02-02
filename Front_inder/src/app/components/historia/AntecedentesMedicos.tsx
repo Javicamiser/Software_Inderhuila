@@ -52,7 +52,6 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoPersonal("");
 
     if (codigoUpper.trim()) {
-      // Primero buscar coincidencia exacta
       const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
       if (enfermedad) {
         setNuevoNombrePersonal(enfermedad);
@@ -60,7 +59,6 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
         setSugerenciasCodigoPersonal([]);
         setMostrarSugerenciasCodigoPersonal(false);
       } else {
-        // Si no hay coincidencia exacta, buscar por código parcial
         const resultados = buscarPorCodigoParcial(codigoUpper);
         if (resultados.length > 0) {
           setSugerenciasCodigoPersonal(resultados);
@@ -106,7 +104,6 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
     setErrorCodigoFamiliar("");
 
     if (codigoUpper.trim()) {
-      // Primero buscar coincidencia exacta
       const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
       if (enfermedad) {
         setNuevoNombreFamiliar(enfermedad);
@@ -114,7 +111,6 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
         setSugerenciasCodigoFamiliar([]);
         setMostrarSugerenciasCodigoFamiliar(false);
       } else {
-        // Si no hay coincidencia exacta, buscar por código parcial
         const resultados = buscarPorCodigoParcial(codigoUpper);
         if (resultados.length > 0) {
           setSugerenciasCodigoFamiliar(resultados);
@@ -233,17 +229,20 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
   return (
     <div className="space-y-8">
       {/* ANTECEDENTES PERSONALES */}
-      <div className="bg-gradient-to-r from-blue-50 to-blue-100/50 p-6 rounded-lg border-l-4 border-blue-500">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="w-6 h-6 text-blue-600" />
-          <h3 className="text-lg font-semibold text-blue-900">Antecedentes Personales</h3>
+      <div className="border-2 border-blue-200 bg-blue-50 p-6 rounded-xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-blue-600 p-2.5 rounded-lg">
+            <User className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-lg font-bold text-blue-900">Antecedentes Personales</h3>
         </div>
 
-        <div className="bg-white p-4 rounded-lg space-y-4 mb-4">
+        <div className="bg-white p-5 rounded-lg border border-blue-100 space-y-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Código CIE-11 */}
             <div className="relative">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Código CIE-11 <span className="text-red-500">*</span>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Código CIE-11
               </label>
               <input
                 type="text"
@@ -255,42 +254,44 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                   }
                 }}
                 placeholder="Ej: BA00"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 uppercase font-mono"
               />
               {errorCodigoPersonal && (
-                <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                  <AlertCircle className="w-4 h-4" />
+                <div className="flex items-center gap-2 mt-2 text-red-600 text-sm bg-red-50 p-2 rounded">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{errorCodigoPersonal}</span>
                 </div>
               )}
               {mostrarSugerenciasCodigoPersonal && sugerenciasCodigoPersonal.length > 0 && (
-                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                <div className="absolute z-20 bg-white border-2 border-blue-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
                   {sugerenciasCodigoPersonal.map((sugerencia) => (
-                    <div
+                    <button
                       key={sugerencia.codigo}
-                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      type="button"
                       onClick={() => {
                         setNuevoCodigoPersonal(sugerencia.codigo);
                         setNuevoNombrePersonal(sugerencia.nombre);
                         setMostrarSugerenciasCodigoPersonal(false);
                         setErrorCodigoPersonal("");
                       }}
+                      className="w-full px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded">
                           {sugerencia.codigo}
                         </span>
                         <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
+            {/* Enfermedad */}
             <div className="md:col-span-2 relative">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Enfermedad <span className="text-red-500">*</span>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Enfermedad
               </label>
               <input
                 type="text"
@@ -301,36 +302,38 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                     setMostrarSugerenciasPersonales(true);
                   }
                 }}
-                placeholder="Escriba el nombre de la enfermedad (mínimo 3 caracteres)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Escriba el nombre (mínimo 3 caracteres)"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               />
               {mostrarSugerenciasPersonales && sugerenciasPersonales.length > 0 && (
-                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                <div className="absolute z-20 bg-white border-2 border-blue-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
                   {sugerenciasPersonales.map((sugerencia) => (
-                    <div
+                    <button
                       key={sugerencia.codigo}
-                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      type="button"
                       onClick={() => {
                         setNuevoCodigoPersonal(sugerencia.codigo);
                         setNuevoNombrePersonal(sugerencia.nombre);
                         setMostrarSugerenciasPersonales(false);
                       }}
+                      className="w-full px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded">
                           {sugerencia.codigo}
                         </span>
                         <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
           </div>
 
+          {/* Observaciones */}
           <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700">
+            <label className="block mb-2 text-sm font-semibold text-gray-700">
               Observaciones
             </label>
             <textarea
@@ -338,48 +341,50 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
               onChange={(e) => setNuevaObservacionPersonal(e.target.value)}
               rows={2}
               placeholder="Detalles adicionales, fecha de diagnóstico, tratamiento actual..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
             />
           </div>
 
+          {/* Botón Agregar */}
           <button
             type="button"
             onClick={handleAgregarPersonal}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 transition-all font-semibold shadow-md hover:shadow-lg"
           >
             <Plus className="w-5 h-5" />
             Agregar Antecedente Personal
           </button>
         </div>
 
+        {/* Lista de Antecedentes */}
         {data.antecedentesPersonales.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700 mb-2">Antecedentes registrados:</p>
+            <p className="text-sm font-semibold text-gray-700 px-1">Antecedentes registrados:</p>
             {data.antecedentesPersonales.map((antecedente, index) => (
               <div
                 key={index}
-                className="bg-white p-3 rounded-md border border-gray-200 flex items-start justify-between"
+                className="bg-white p-4 rounded-lg border-2 border-blue-100 flex items-start justify-between hover:border-blue-300 transition-colors"
               >
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-mono">
                       {antecedente.codigoCIE11}
                     </span>
-                    <span className="font-medium text-gray-800">
+                    <span className="font-semibold text-gray-800">
                       {antecedente.nombreEnfermedad}
                     </span>
                   </div>
                   {antecedente.observaciones && (
-                    <p className="text-sm text-gray-600 mt-1">{antecedente.observaciones}</p>
+                    <p className="text-sm text-gray-600 mt-2">{antecedente.observaciones}</p>
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => handleEliminarPersonal(index)}
-                  className="ml-3 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                  className="ml-3 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                   title="Eliminar"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
             ))}
@@ -387,24 +392,27 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
         )}
 
         {data.antecedentesPersonales.length === 0 && (
-          <p className="text-sm text-gray-500 italic text-center py-2">
+          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
             No hay antecedentes personales registrados
           </p>
         )}
       </div>
 
       {/* ANTECEDENTES FAMILIARES */}
-      <div className="bg-gradient-to-r from-[#B8C91A]/20 to-[#B8C91A]/10 p-6 rounded-lg border-l-4 border-[#B8C91A]">
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="w-6 h-6 text-[#93A115]" />
-          <h3 className="text-lg font-semibold text-gray-900">Antecedentes Familiares</h3>
+      <div className="border-2 border-yellow-200 bg-yellow-50 p-6 rounded-xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-yellow-600 p-2.5 rounded-lg">
+            <Users className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-lg font-bold text-yellow-900">Antecedentes Familiares</h3>
         </div>
 
-        <div className="bg-white p-4 rounded-lg space-y-4 mb-4">
+        <div className="bg-white p-5 rounded-lg border border-yellow-100 space-y-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Código CIE-11 */}
             <div className="relative">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Código CIE-11 <span className="text-red-500">*</span>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Código CIE-11
               </label>
               <input
                 type="text"
@@ -416,42 +424,44 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                   }
                 }}
                 placeholder="Ej: BA00"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#B8C91A] uppercase"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 uppercase font-mono"
               />
               {errorCodigoFamiliar && (
-                <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                  <AlertCircle className="w-4 h-4" />
+                <div className="flex items-center gap-2 mt-2 text-red-600 text-sm bg-red-50 p-2 rounded">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{errorCodigoFamiliar}</span>
                 </div>
               )}
               {mostrarSugerenciasCodigoFamiliar && sugerenciasCodigoFamiliar.length > 0 && (
-                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                <div className="absolute z-20 bg-white border-2 border-yellow-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
                   {sugerenciasCodigoFamiliar.map((sugerencia) => (
-                    <div
+                    <button
                       key={sugerencia.codigo}
-                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      type="button"
                       onClick={() => {
                         setNuevoCodigoFamiliar(sugerencia.codigo);
                         setNuevoNombreFamiliar(sugerencia.nombre);
                         setMostrarSugerenciasCodigoFamiliar(false);
                         setErrorCodigoFamiliar("");
                       }}
+                      className="w-full px-4 py-3 hover:bg-yellow-50 border-b border-gray-100 last:border-b-0 transition-colors text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded">
                           {sugerencia.codigo}
                         </span>
                         <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
+            {/* Enfermedad */}
             <div className="md:col-span-2 relative">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Enfermedad <span className="text-red-500">*</span>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Enfermedad
               </label>
               <input
                 type="text"
@@ -462,42 +472,44 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                     setMostrarSugerenciasFamiliares(true);
                   }
                 }}
-                placeholder="Escriba el nombre de la enfermedad (mínimo 3 caracteres)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#B8C91A]"
+                placeholder="Escriba el nombre (mínimo 3 caracteres)"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200"
               />
               {mostrarSugerenciasFamiliares && sugerenciasFamiliares.length > 0 && (
-                <div className="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 w-full">
+                <div className="absolute z-20 bg-white border-2 border-yellow-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
                   {sugerenciasFamiliares.map((sugerencia) => (
-                    <div
+                    <button
                       key={sugerencia.codigo}
-                      className="px-4 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      type="button"
                       onClick={() => {
                         setNuevoCodigoFamiliar(sugerencia.codigo);
                         setNuevoNombreFamiliar(sugerencia.nombre);
                         setMostrarSugerenciasFamiliares(false);
                       }}
+                      className="w-full px-4 py-3 hover:bg-yellow-50 border-b border-gray-100 last:border-b-0 transition-colors text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded">
                           {sugerencia.codigo}
                         </span>
                         <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
           </div>
 
+          {/* Familiar afectado */}
           <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700">
-              Familiar afectado <span className="text-red-500">*</span>
+            <label className="block mb-2 text-sm font-semibold text-gray-700">
+              Familiar afectado
             </label>
             <select
               value={nuevoFamiliar}
               onChange={(e) => setNuevoFamiliar(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#B8C91A]"
+              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 bg-white"
             >
               <option value="">Seleccione...</option>
               {familiares.map((fam) => (
@@ -508,8 +520,9 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
             </select>
           </div>
 
+          {/* Observaciones */}
           <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700">
+            <label className="block mb-2 text-sm font-semibold text-gray-700">
               Observaciones
             </label>
             <textarea
@@ -517,51 +530,53 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
               onChange={(e) => setNuevaObservacionFamiliar(e.target.value)}
               rows={2}
               placeholder="Detalles adicionales sobre el antecedente familiar..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#B8C91A] resize-none"
+              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 resize-none"
             />
           </div>
 
+          {/* Botón Agregar */}
           <button
             type="button"
             onClick={handleAgregarFamiliar}
-            className="w-full flex items-center justify-center gap-2 bg-[#B8C91A] text-gray-800 py-2 px-4 rounded-md hover:bg-[#93A115] hover:text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-yellow-600 text-white py-2.5 px-4 rounded-lg hover:bg-yellow-700 transition-all font-semibold shadow-md hover:shadow-lg"
           >
             <Plus className="w-5 h-5" />
             Agregar Antecedente Familiar
           </button>
         </div>
 
+        {/* Lista de Antecedentes */}
         {data.antecedentesFamiliares.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700 mb-2">Antecedentes registrados:</p>
+            <p className="text-sm font-semibold text-gray-700 px-1">Antecedentes registrados:</p>
             {data.antecedentesFamiliares.map((antecedente, index) => (
               <div
                 key={index}
-                className="bg-white p-3 rounded-md border border-gray-200 flex items-start justify-between"
+                className="bg-white p-4 rounded-lg border-2 border-yellow-100 flex items-start justify-between hover:border-yellow-300 transition-colors"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-mono bg-[#B8C91A]/30 text-gray-800 px-2 py-0.5 rounded">
+                    <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-mono">
                       {antecedente.codigoCIE11}
                     </span>
-                    <span className="font-medium text-gray-800">
+                    <span className="font-semibold text-gray-800">
                       {antecedente.nombreEnfermedad}
                     </span>
-                    <span className="text-sm text-gray-500">
-                      • {antecedente.familiar}
+                    <span className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded">
+                      {antecedente.familiar}
                     </span>
                   </div>
                   {antecedente.observaciones && (
-                    <p className="text-sm text-gray-600 mt-1">{antecedente.observaciones}</p>
+                    <p className="text-sm text-gray-600 mt-2">{antecedente.observaciones}</p>
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => handleEliminarFamiliar(index)}
-                  className="ml-3 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                  className="ml-3 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                   title="Eliminar"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
             ))}
@@ -569,27 +584,27 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
         )}
 
         {data.antecedentesFamiliares.length === 0 && (
-          <p className="text-sm text-gray-500 italic text-center py-2">
+          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
             No hay antecedentes familiares registrados
           </p>
         )}
       </div>
 
       {/* LESIONES PREVIAS */}
-      <div>
-        <label className="block mb-3 font-medium text-gray-800">Lesiones previas</label>
-        <div className="flex gap-4 mb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="bg-orange-50 border-2 border-orange-200 p-6 rounded-xl">
+        <label className="block mb-4 font-semibold text-gray-800">Lesiones previas</label>
+        <div className="flex gap-6 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="lesiones"
               checked={data.lesionesDeportivas === true}
               onChange={() => updateData({ lesionesDeportivas: true })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-orange-600 focus:ring-2 focus:ring-orange-300"
             />
-            <span className="text-gray-700">Sí</span>
+            <span className="text-gray-700 font-medium">Sí</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="lesiones"
@@ -601,33 +616,33 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
                   fechaUltimaLesion: "",
                 })
               }
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-orange-600 focus:ring-2 focus:ring-orange-300"
             />
-            <span className="text-gray-700">No</span>
+            <span className="text-gray-700 font-medium">No</span>
           </label>
         </div>
 
         {data.lesionesDeportivas && (
-          <div className="space-y-4">
+          <div className="space-y-4 bg-white p-4 rounded-lg border border-orange-100">
             <div>
-              <label className="block mb-2 text-sm text-gray-600">Descripción de lesiones</label>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">Descripción de lesiones</label>
               <textarea
                 value={data.descripcionLesiones}
                 onChange={(e) => updateData({ descripcionLesiones: e.target.value })}
                 rows={4}
                 placeholder="Describa las lesiones sufridas (tipo, gravedad, zona afectada)..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 resize-none"
               />
             </div>
 
             <div>
-              <label className="block mb-2 text-sm text-gray-600">Fecha de la última lesión</label>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">Fecha de la última lesión</label>
               <input
                 type="date"
                 value={data.fechaUltimaLesion}
                 onChange={(e) => updateData({ fechaUltimaLesion: e.target.value })}
                 max={new Date().toISOString().split("T")[0]}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
               />
             </div>
           </div>
@@ -635,28 +650,28 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
       </div>
 
       {/* CIRUGÍAS PREVIAS */}
-      <div>
-        <label className="block mb-3 font-medium text-gray-800">Cirugías previas</label>
-        <div className="flex gap-4 mb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="bg-purple-50 border-2 border-purple-200 p-6 rounded-xl">
+        <label className="block mb-4 font-semibold text-gray-800">Cirugías previas</label>
+        <div className="flex gap-6 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="cirugias"
               checked={data.cirugiasPrevias === true}
               onChange={() => updateData({ cirugiasPrevias: true })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-purple-600 focus:ring-2 focus:ring-purple-300"
             />
-            <span className="text-gray-700">Sí</span>
+            <span className="text-gray-700 font-medium">Sí</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="cirugias"
               checked={data.cirugiasPrevias === false}
               onChange={() => updateData({ cirugiasPrevias: false, detalleCirugias: "" })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-purple-600 focus:ring-2 focus:ring-purple-300"
             />
-            <span className="text-gray-700">No</span>
+            <span className="text-gray-700 font-medium">No</span>
           </label>
         </div>
 
@@ -666,34 +681,34 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
             onChange={(e) => updateData({ detalleCirugias: e.target.value })}
             rows={3}
             placeholder="Detalle las cirugías realizadas (tipo, fecha, resultados)..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full px-4 py-2.5 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 resize-none bg-white"
           />
         )}
       </div>
 
       {/* ALERGIAS */}
-      <div>
-        <label className="block mb-3 font-medium text-gray-800">Alergias</label>
-        <div className="flex gap-4 mb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="bg-red-50 border-2 border-red-200 p-6 rounded-xl">
+        <label className="block mb-4 font-semibold text-gray-800">Alergias</label>
+        <div className="flex gap-6 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="alergias"
               checked={data.tieneAlergias === true}
               onChange={() => updateData({ tieneAlergias: true })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-red-600 focus:ring-2 focus:ring-red-300"
             />
-            <span className="text-gray-700">Sí</span>
+            <span className="text-gray-700 font-medium">Sí</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="alergias"
               checked={data.tieneAlergias === false}
               onChange={() => updateData({ tieneAlergias: false, alergias: [] })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-red-600 focus:ring-2 focus:ring-red-300"
             />
-            <span className="text-gray-700">No</span>
+            <span className="text-gray-700 font-medium">No</span>
           </label>
         </div>
 
@@ -710,28 +725,28 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
       </div>
 
       {/* MEDICACIÓN ACTUAL */}
-      <div>
-        <label className="block mb-3 font-medium text-gray-800">Medicación actual</label>
-        <div className="flex gap-4 mb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="bg-cyan-50 border-2 border-cyan-200 p-6 rounded-xl">
+        <label className="block mb-4 font-semibold text-gray-800">Medicación actual</label>
+        <div className="flex gap-6 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="medicacion"
               checked={data.tomaMedicacion === true}
               onChange={() => updateData({ tomaMedicacion: true })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-cyan-600 focus:ring-2 focus:ring-cyan-300"
             />
-            <span className="text-gray-700">Sí</span>
+            <span className="text-gray-700 font-medium">Sí</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="radio"
               name="medicacion"
               checked={data.tomaMedicacion === false}
               onChange={() => updateData({ tomaMedicacion: false, medicacionActual: "" })}
-              className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="w-5 h-5 text-cyan-600 focus:ring-2 focus:ring-cyan-300"
             />
-            <span className="text-gray-700">No</span>
+            <span className="text-gray-700 font-medium">No</span>
           </label>
         </div>
 
@@ -741,14 +756,14 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
             value={data.medicacionActual}
             onChange={(e) => updateData({ medicacionActual: e.target.value })}
             placeholder="Especifique los medicamentos que toma actualmente..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2.5 border-2 border-cyan-300 rounded-lg focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white"
           />
         )}
       </div>
 
       {/* VACUNAS */}
-      <div>
-        <label className="block mb-3 font-medium text-gray-800">Vacunas</label>
+      <div className="bg-green-50 border-2 border-green-200 p-6 rounded-xl">
+        <label className="block mb-3 font-semibold text-gray-800">Vacunas</label>
         <p className="text-sm text-gray-600 mb-4">
           Aquí se muestran las vacunas registradas del deportista. Puede agregar nuevas vacunas, cargar certificados y descargar archivos.
         </p>
@@ -758,28 +773,10 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
             readonly={false}
           />
         ) : (
-          <p className="text-sm text-gray-500 italic text-center py-4">
+          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
             Los datos del deportista se cargarán cuando se abra la historia clínica.
           </p>
         )}
-      </div>
-
-      {/* Botones */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
-        <button
-          onClick={onPrevious}
-          className="flex-1 flex items-center justify-center gap-2 bg-gray-300 text-gray-700 py-3 px-6 rounded-md hover:bg-gray-400 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Anterior
-        </button>
-        <button
-          onClick={onNext}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Siguiente
-          <ChevronRight className="w-5 h-5" />
-        </button>
       </div>
     </div>
   );

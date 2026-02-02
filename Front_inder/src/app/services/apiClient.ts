@@ -131,10 +131,8 @@ export interface HistoriaClinica {
   id?: string;
   deportista_id: string;
   fecha_apertura: string;
-  estado_id: string;
   created_at?: string;
   deportista?: Deportista;
-  estado?: CatalogoItem;
   grupos?: RespuestaGrupo[];
   respuestas?: FormularioRespuesta[];
   archivos?: ArchivoCinico[];

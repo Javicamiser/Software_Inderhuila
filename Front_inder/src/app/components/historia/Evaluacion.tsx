@@ -10,7 +10,6 @@ type Props = {
 
 export function Evaluacion({ data, updateData, onNext, onCancel }: Props) {
   const handleNext = () => {
-    // Validar que los campos obligatorios estén llenos
     if (!data.motivoConsulta || data.motivoConsulta.trim() === "") {
       alert("Por favor ingrese el motivo de consulta");
       return;
@@ -58,24 +57,21 @@ export function Evaluacion({ data, updateData, onNext, onCancel }: Props) {
         </p>
       </div>
 
-      {/* Botones de navegación */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={handleNext}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Continuar
-          <ChevronRight className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex items-center justify-center gap-2 bg-gray-300 text-gray-700 py-3 px-6 rounded-md hover:bg-gray-400 transition-colors"
-        >
-          <X className="w-5 h-5" />
-          Cancelar
-        </button>
+      {/* Indicador de completitud */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          ✓ Campos completados: 
+          <span className="font-semibold ml-2">
+            {[data.motivoConsulta?.trim(), data.enfermedadActual?.trim()].filter(Boolean).length} / 2
+          </span>
+        </p>
+      </div>
+
+      {/* Información útil */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <p className="text-sm text-amber-800">
+          💡 <strong>Nota:</strong> Puede guardar su progreso en cualquier momento y continuar después. Los datos se guardan automáticamente.
+        </p>
       </div>
     </div>
   );

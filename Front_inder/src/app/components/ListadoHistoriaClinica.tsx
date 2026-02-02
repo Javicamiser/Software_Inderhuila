@@ -80,7 +80,8 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
           </div>
           <button
             onClick={() => onNavigate?.('historia')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md"
+            style={{ backgroundColor: '#0369A1' }}
+            className="text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:opacity-90 transition-colors shadow-md"
           >
             <Plus className="w-5 h-5" />
             Nueva Historia
@@ -96,7 +97,11 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
               placeholder="Buscar por nombre, apellido o documento..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                borderColor: searchQuery ? '#0369A1' : undefined,
+                boxShadow: searchQuery ? '0 0 0 2px rgba(3, 105, 161, 0.1)' : undefined
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none"
             />
           </div>
         </div>
@@ -105,7 +110,10 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
         <div className="bg-white rounded-lg shadow overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div 
+                className="animate-spin rounded-full h-12 w-12 border-b-2"
+                style={{ borderColor: '#0369A1' }}
+              ></div>
               <span className="ml-4 text-gray-600">Cargando historias clínicas...</span>
             </div>
           ) : historiasFiltradas.length === 0 ? (
@@ -115,13 +123,13 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
           ) : (
             <>
               <table className="w-full">
-                <thead className="bg-gray-100 border-b-2 border-gray-200">
+                <thead style={{ backgroundColor: '#0369A1' }} className="text-white">
                   <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Deportista</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Documento</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Fecha Apertura</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Fecha Creación</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Deportista</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Documento</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Fecha Apertura</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Fecha Creación</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -150,7 +158,8 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
                           <div className="flex gap-2 justify-center">
                             <button
                               onClick={() => onNavigate?.(`historia-vista-${historia.id}`)}
-                              className="text-blue-600 hover:bg-blue-100 p-2 rounded transition-colors"
+                              style={{ color: '#0369A1' }}
+                              className="hover:bg-blue-100 p-2 rounded transition-colors"
                               title="Ver detalles"
                             >
                               <Eye className="w-5 h-5" />

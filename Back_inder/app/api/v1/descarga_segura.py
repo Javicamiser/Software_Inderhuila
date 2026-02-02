@@ -15,7 +15,7 @@ from app.services.documento_service import generar_documento_historia_clinica
 router = APIRouter(prefix="/descarga-segura", tags=["Descarga Segura"])
 
 # Configuración de URL - Cambiar en producción
-BASE_URL_FRONTEND = "http://192.168.0.23:5173"
+BASE_URL_FRONTEND = "http://192.168.20.12:5173"
 
 
 class VerificarTokenRequest(BaseModel):

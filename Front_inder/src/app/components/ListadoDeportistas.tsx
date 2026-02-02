@@ -3,6 +3,14 @@ import { deportistasService, Deportista } from '../services/apiClient';
 import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, Eye, Search, X } from 'lucide-react';
 
+// ============================================================================
+// IMPORTAR LOGOS DESDE ASSETS
+// ============================================================================
+import logoLucha from '../../assets/logo_lucha.svg';
+import logoNatacion from '../../assets/logo_natacion.svg';
+import logoPesas from '../../assets/logo_pesas.svg';
+import logoSubacuatico from '../../assets/logo_subacuatico.svg';
+
 interface ListadoDeportistasProps {
   onNavigate?: (view: string) => void;
 }
@@ -115,6 +123,52 @@ const ETNIAS = [
   "Prefiero no decirlo"
 ];
 
+// ============================================================================
+// MAPEO DE DISCIPLINAS A LOGOS - CORREGIDO CON NORMALIZACIÓN
+// ============================================================================
+const getDisciplinaLogo = (disciplina: string | undefined) => {
+  if (!disciplina) return null;
+  
+  // Normalizar: remover acentos y espacios
+  const disciplinaLower = disciplina
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // Remover acentos
+  
+  console.log('Disciplina original:', disciplina);
+  console.log('Disciplina normalizada:', disciplinaLower);
+  
+  if (disciplinaLower.includes('subacuatica') || disciplinaLower.includes('buceo')) {
+    console.log('Coincide: Subacuática');
+    return { 
+      logo: logoSubacuatico, 
+      nombre: 'Subacuática'
+    };
+  } else if (disciplinaLower.includes('pesas') || disciplinaLower.includes('peso')) {
+    console.log('Coincide: Pesas');
+    return { 
+      logo: logoPesas, 
+      nombre: 'Pesas'
+    };
+  } else if (disciplinaLower.includes('natacion') || disciplinaLower.includes('nado')) {
+    console.log('Coincide: Natación');
+    return { 
+      logo: logoNatacion, 
+      nombre: 'Natación'
+    };
+  } else if (disciplinaLower.includes('lucha')) {
+    console.log('Coincide: Lucha');
+    return { 
+      logo: logoLucha, 
+      nombre: 'Lucha'
+    };
+  }
+  
+  console.log('No coincidió con ninguna disciplina');
+  return null;
+};
+
 export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
   const [deportistas, setDeportistas] = useState<Deportista[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -122,7 +176,6 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   
-  // Estados para los modales
   const [modalVer, setModalVer] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
   const [deportistaSeleccionado, setDeportistaSeleccionado] = useState<Deportista | null>(null);
@@ -138,7 +191,6 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
       setIsLoading(true);
       const response = await deportistasService.getAll(page, 10);
       
-      // Manejo de respuesta con paginación
       if (Array.isArray(response)) {
         setDeportistas(response);
       } else if (response.items) {
@@ -178,14 +230,13 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
 
   const handleAbrirEditar = (deportista: Deportista) => {
     setDeportistaSeleccionado(deportista);
-    // Separar nombre y apellido
     const nombreCompleto = `${deportista.nombres} ${deportista.apellidos}`;
     
     setFormEditando({
       nombreCompleto: nombreCompleto,
       fechaNacimiento: deportista.fecha_nacimiento || '',
-      genero: '', // Se rellenará basado en sexo_id
-      tipoDocumento: '', // Se rellenará basado en tipo_documento_id
+      genero: '',
+      tipoDocumento: '',
       numeroDocumento: deportista.numero_documento,
       nacionalidad: '',
       departamento: '',
@@ -198,7 +249,6 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
       disciplina: deportista.tipo_deporte || '',
     });
     
-    // Calcular edad
     if (deportista.fecha_nacimiento) {
       const hoy = new Date();
       const nacimiento = new Date(deportista.fecha_nacimiento);
@@ -219,12 +269,10 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
     try {
       setIsLoading(true);
       
-      // Separar nombre completo en nombres y apellidos
       const partes = formEditando.nombreCompleto.trim().split(" ");
       const nombres = partes.slice(0, -1).join(" ") || partes[0];
       const apellidos = partes[partes.length - 1] || "";
       
-      // Preparar datos para actualizar
       const datosActualizar = {
         nombres: nombres,
         apellidos: apellidos,
@@ -248,7 +296,6 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
     }
   };
   
-  // Calcular edad automáticamente en el modal de edición
   useEffect(() => {
     if (formEditando.fechaNacimiento) {
       const hoy = new Date();
@@ -284,7 +331,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
           </div>
           <button
             onClick={() => onNavigate?.('registro')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md"
+            style={{ backgroundColor: '#0369A1' }}
+            className="text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:opacity-90 transition-colors shadow-md"
           >
             <Plus className="w-5 h-5" />
             Nuevo Deportista
@@ -300,7 +348,11 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
               placeholder="Buscar por nombre, documento, email o teléfono..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                borderColor: searchQuery ? '#0369A1' : undefined,
+                boxShadow: searchQuery ? '0 0 0 2px rgba(3, 105, 161, 0.1)' : undefined
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none"
             />
           </div>
         </div>
@@ -309,7 +361,10 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
         <div className="bg-white rounded-lg shadow overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div 
+                className="animate-spin rounded-full h-12 w-12 border-b-2"
+                style={{ borderColor: '#0369A1' }}
+              ></div>
               <span className="ml-4 text-gray-600">Cargando deportistas...</span>
             </div>
           ) : deportistasFiltrados.length === 0 ? (
@@ -319,62 +374,77 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
           ) : (
             <>
               <table className="w-full">
-                <thead className="bg-gray-100 border-b-2 border-gray-200">
+                <thead style={{ backgroundColor: '#0369A1' }} className="text-white">
                   <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Documento</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nombre</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Teléfono</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Estado</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Documento</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Nombre</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Teléfono</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Email</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold">Disciplina</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {deportistasFiltrados.map((depo, idx) => (
-                    <tr 
-                      key={depo.id} 
-                      className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{depo.numero_documento}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {depo.nombres} {depo.apellidos}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{depo.telefono || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{depo.email || '-'}</td>
-                      <td className="px-6 py-4 text-sm">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          N/A
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex gap-2 justify-center">
-                          <button
-                            onClick={() => handleVerDetalles(depo)}
-                            className="text-blue-600 hover:bg-blue-100 p-2 rounded transition-colors"
-                            title="Ver detalles"
-                          >
-                            <Eye className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleAbrirEditar(depo)}
-                            className="text-green-600 hover:bg-green-100 p-2 rounded transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleEliminar(depo.id, `${depo.nombres} ${depo.apellidos}`)}
-                            className="text-red-600 hover:bg-red-100 p-2 rounded transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {deportistasFiltrados.map((depo, idx) => {
+                    const disciplinaInfo = getDisciplinaLogo(depo.tipo_deporte);
+                    
+                    return (
+                      <tr 
+                        key={depo.id} 
+                        className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{depo.numero_documento}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {depo.nombres} {depo.apellidos}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{depo.telefono || '-'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{depo.email || '-'}</td>
+                        <td className="px-6 py-4 text-center min-h-32 flex items-center justify-center">
+                          {disciplinaInfo ? (
+                            <div className="flex items-center justify-center">
+                              <img 
+                                src={disciplinaInfo.logo} 
+                                alt={disciplinaInfo.nombre}
+                                title={disciplinaInfo.nombre}
+                                className="w-24 h-24 object-contain"
+                                style={{ minWidth: '96px', minHeight: '96px' }}
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-500 italic">
+                              {depo.tipo_deporte || '-'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              onClick={() => handleVerDetalles(depo)}
+                              style={{ color: '#0369A1' }}
+                              className="hover:bg-blue-100 p-2 rounded transition-colors"
+                              title="Ver detalles"
+                            >
+                              <Eye className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleAbrirEditar(depo)}
+                              className="text-green-600 hover:bg-green-100 p-2 rounded transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(depo.id, `${depo.nombres} ${depo.apellidos}`)}
+                              className="text-red-600 hover:bg-red-100 p-2 rounded transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -408,13 +478,16 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
         {modalVer && deportistaSeleccionado && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Detalles del Deportista</h2>
+              <div 
+                style={{ backgroundColor: '#0369A1' }}
+                className="sticky top-0 text-white border-b border-gray-200 px-6 py-4 flex items-center justify-between"
+              >
+                <h2 className="text-xl font-bold">Detalles del Deportista</h2>
                 <button
                   onClick={() => setModalVer(false)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-opacity-80 rounded-full transition-colors"
                 >
-                  <X className="w-5 h-5 text-gray-500" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
@@ -449,8 +522,17 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                     <p className="text-gray-900">{deportistaSeleccionado.fecha_nacimiento || '-'}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700">Edad</label>
-                    <p className="text-gray-900">{deportistaSeleccionado.edad || '-'}</p>
+                    <label className="text-sm font-semibold text-gray-700">Disciplina</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {getDisciplinaLogo(deportistaSeleccionado.tipo_deporte) && (
+                        <img 
+                          src={getDisciplinaLogo(deportistaSeleccionado.tipo_deporte)!.logo} 
+                          alt="disciplina"
+                          className="w-10 h-10 object-contain"
+                        />
+                      )}
+                      <p className="text-gray-900">{deportistaSeleccionado.tipo_deporte || '-'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -471,20 +553,23 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
         {modalEditar && deportistaSeleccionado && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Editar Deportista</h2>
+              <div 
+                style={{ backgroundColor: '#0369A1' }}
+                className="sticky top-0 text-white border-b border-gray-200 px-6 py-4 flex items-center justify-between"
+              >
+                <h2 className="text-xl font-bold">Editar Deportista</h2>
                 <button
                   onClick={() => setModalEditar(false)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-opacity-80 rounded-full transition-colors"
                 >
-                  <X className="w-5 h-5 text-gray-500" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="p-6 space-y-6">
                 {/* DATOS PERSONALES */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Datos Personales</h3>
+                  <h3 style={{ color: '#0369A1', borderColor: '#0369A1' }} className="text-lg font-semibold border-b pb-2">Datos Personales</h3>
                   
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre Completo</label>
@@ -492,7 +577,12 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                       type="text"
                       value={formEditando.nombreCompleto || ''}
                       onChange={(e) => setFormEditando({ ...formEditando, nombreCompleto: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{
+                        borderColor: '#0369A1'
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+                      onFocus={(e) => e.target.style.boxShadow = '0 0 0 2px rgba(3, 105, 161, 0.1)'}
+                      onBlur={(e) => e.target.style.boxShadow = 'none'}
                     />
                   </div>
 
@@ -503,7 +593,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                         type="date"
                         value={formEditando.fechaNacimiento || ''}
                         onChange={(e) => setFormEditando({ ...formEditando, fechaNacimiento: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ borderColor: '#0369A1' }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                       />
                     </div>
                     <div>
@@ -520,7 +611,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                       <select
                         value={formEditando.tipoDocumento || ''}
                         onChange={(e) => setFormEditando({ ...formEditando, tipoDocumento: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ borderColor: '#0369A1' }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                       >
                         <option value="">Seleccionar...</option>
                         <option value="cedula_ciudadania">Cédula de ciudadanía</option>
@@ -537,7 +629,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                         type="text"
                         value={formEditando.numeroDocumento || ''}
                         onChange={(e) => setFormEditando({ ...formEditando, numeroDocumento: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ borderColor: '#0369A1' }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                       />
                     </div>
                   </div>
@@ -547,7 +640,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                     <select
                       value={formEditando.genero || ''}
                       onChange={(e) => setFormEditando({ ...formEditando, genero: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ borderColor: '#0369A1' }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                     >
                       <option value="">Seleccionar...</option>
                       <option value="masculino">Masculino</option>
@@ -559,7 +653,7 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
 
                 {/* DATOS DE UBICACIÓN */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Ubicación</h3>
+                  <h3 style={{ color: '#0369A1', borderColor: '#0369A1' }} className="text-lg font-semibold border-b pb-2">Ubicación</h3>
                   
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Nacionalidad</label>
@@ -568,7 +662,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                       onChange={(e) => {
                         setFormEditando({ ...formEditando, nacionalidad: e.target.value, departamento: '', ciudad: '' });
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ borderColor: '#0369A1' }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                     >
                       <option value="">Seleccionar...</option>
                       {PAISES.map(pais => (
@@ -587,7 +682,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                             onChange={(e) => {
                               setFormEditando({ ...formEditando, departamento: e.target.value, ciudad: '' });
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{ borderColor: '#0369A1' }}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                           >
                             <option value="">Seleccionar...</option>
                             {DEPARTAMENTOS.map(dept => (
@@ -600,7 +696,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                           <select
                             value={formEditando.ciudad || ''}
                             onChange={(e) => setFormEditando({ ...formEditando, ciudad: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{ borderColor: '#0369A1' }}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                             disabled={!formEditando.departamento}
                           >
                             <option value="">Seleccionar...</option>
@@ -617,7 +714,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                           <select
                             value={formEditando.estrato || ''}
                             onChange={(e) => setFormEditando({ ...formEditando, estrato: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{ borderColor: '#0369A1' }}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                           >
                             <option value="">Seleccionar...</option>
                             <option value="1">Estrato 1</option>
@@ -633,7 +731,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                           <select
                             value={formEditando.etnia || ''}
                             onChange={(e) => setFormEditando({ ...formEditando, etnia: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{ borderColor: '#0369A1' }}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                           >
                             <option value="">Seleccionar...</option>
                             {ETNIAS.map(etnia => (
@@ -651,14 +750,15 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                       type="text"
                       value={formEditando.direccion || ''}
                       onChange={(e) => setFormEditando({ ...formEditando, direccion: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ borderColor: '#0369A1' }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                     />
                   </div>
                 </div>
 
                 {/* DATOS DE CONTACTO */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Contacto</h3>
+                  <h3 style={{ color: '#0369A1', borderColor: '#0369A1' }} className="text-lg font-semibold border-b pb-2">Contacto</h3>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -667,7 +767,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                         type="tel"
                         value={formEditando.telefono || ''}
                         onChange={(e) => setFormEditando({ ...formEditando, telefono: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ borderColor: '#0369A1' }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                       />
                     </div>
                     <div>
@@ -676,7 +777,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                         type="email"
                         value={formEditando.correoElectronico || ''}
                         onChange={(e) => setFormEditando({ ...formEditando, correoElectronico: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ borderColor: '#0369A1' }}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                       />
                     </div>
                   </div>
@@ -684,20 +786,21 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
 
                 {/* DATOS DEPORTIVOS */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Información Deportiva</h3>
+                  <h3 style={{ color: '#0369A1', borderColor: '#0369A1' }} className="text-lg font-semibold border-b pb-2">Información Deportiva</h3>
                   
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Disciplina/Deporte <span className="text-red-500">*</span></label>
                     <select
                       value={formEditando.disciplina || ''}
                       onChange={(e) => setFormEditando({ ...formEditando, disciplina: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ borderColor: '#0369A1' }}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
                     >
                       <option value="">Seleccionar...</option>
-                      <option value="pesas">Pesas</option>
-                      <option value="natacion">Natación</option>
-                      <option value="subacuatica">Subacuática</option>
-                      <option value="lucha">Lucha</option>
+                      <option value="Pesas">Pesas</option>
+                      <option value="Natación">Natación</option>
+                      <option value="Subacuática">Subacuática</option>
+                      <option value="Lucha">Lucha</option>
                     </select>
                   </div>
                 </div>
@@ -713,7 +816,8 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
                 <button
                   onClick={handleGuardarEdicion}
                   disabled={isLoading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: '#0369A1' }}
+                  className="px-4 py-2 text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50"
                 >
                   {isLoading ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
@@ -725,3 +829,5 @@ export function ListadoDeportistas({ onNavigate }: ListadoDeportistasProps) {
     </div>
   );
 }
+
+export default ListadoDeportistas;

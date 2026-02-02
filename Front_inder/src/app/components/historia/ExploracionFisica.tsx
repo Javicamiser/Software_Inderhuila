@@ -16,7 +16,7 @@ type AlertInfo = {
   message: string;
 };
 
-// Componente reutilizable para cada sistema - MOVIDO FUERA del componente principal
+// Componente reutilizable para cada sistema
 const SistemaExploracion = ({ 
   nombre, 
   nombreClave, 
@@ -55,10 +55,11 @@ const SistemaExploracion = ({
   eliminarPlantillaPersonalizada: (sistema: string, index: number) => void;
 }) => {
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <label className="block mb-3 font-medium text-gray-800">{nombre}</label>
-      <div className="flex gap-4 mb-3">
-        <label className="flex items-center gap-2 cursor-pointer">
+    <div className="border-2 border-gray-200 rounded-xl p-5 hover:border-blue-300 transition-colors">
+      <label className="block mb-4 font-semibold text-gray-800">{nombre}</label>
+      
+      <div className="flex gap-6 mb-4">
+        <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="radio"
             name={`exploracion-${nombreClave}`}
@@ -71,11 +72,11 @@ const SistemaExploracion = ({
               };
               updateData({ exploracionSistemas: newExploracion });
             }}
-            className="w-4 h-4 text-blue-600"
+            className="w-5 h-5 text-green-600 focus:ring-2 focus:ring-green-300"
           />
-          <span className="text-gray-700">Normal</span>
+          <span className="text-gray-700 font-medium">Normal</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="radio"
             name={`exploracion-${nombreClave}`}
@@ -85,14 +86,17 @@ const SistemaExploracion = ({
               (newExploracion as any)[nombreClave] = { estado: "anormal", observaciones: "" };
               updateData({ exploracionSistemas: newExploracion });
             }}
-            className="w-4 h-4 text-blue-600"
+            className="w-5 h-5 text-red-600 focus:ring-2 focus:ring-red-300"
           />
-          <span className="text-gray-700">Anormal</span>
+          <span className="text-gray-700 font-medium">Anormal</span>
         </label>
       </div>
       
       {(estado === "normal" || estado === "anormal") && (
         <>
+          <label className="block mb-2.5 font-semibold text-gray-800">
+            Observaciones <span className="text-red-500">*</span>
+          </label>
           <textarea
             value={observaciones}
             onChange={(e) => {
@@ -102,102 +106,116 @@ const SistemaExploracion = ({
             }}
             rows={3}
             placeholder={estado === "normal" ? "Describa los hallazgos normales..." : "Describa los hallazgos anormales..."}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${
-              estado === "normal" ? "border-green-300 bg-green-50/30" : "border-gray-300"
+            className={`w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 resize-none font-medium ${
+              estado === "normal" 
+                ? "border-green-300 bg-green-50 focus:border-green-500 focus:ring-green-200" 
+                : "border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200"
             }`}
           />
           
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => toggleTemplates(nombreClave)}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              <FileText className="w-4 h-4" />
-              {showTemplates[nombreClave] ? "Ocultar plantillas" : "Mostrar plantillas"}
-            </button>
-            
-            {showTemplates[nombreClave] && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">Plantillas predefinidas:</p>
-                {plantillasPredefinidas[nombreClave].map((plantilla: string, index: number) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => aplicarPlantilla(nombreClave, plantilla)}
-                    className="block w-full text-left px-3 py-2 bg-blue-50 text-gray-700 text-sm rounded-md hover:bg-blue-100 border border-blue-200 transition-colors"
-                  >
-                    {plantilla}
-                  </button>
-                ))}
-                
-                {customTemplates[nombreClave].length > 0 && (
-                  <>
-                    <p className="text-xs font-semibold text-gray-600 uppercase mt-3">Plantillas personalizadas:</p>
-                    {customTemplates[nombreClave].map((plantilla: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2">
+          {/* Mostrar plantillas SOLO si estado es "normal" */}
+          {estado === "normal" && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => toggleTemplates(nombreClave)}
+                className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-2 rounded-lg transition-all hover:bg-blue-100"
+              >
+                <FileText className="w-4 h-4" />
+                {showTemplates[nombreClave] ? "Ocultar plantillas" : "Mostrar plantillas"}
+              </button>
+              
+              {showTemplates[nombreClave] && (
+                <div className="mt-4 space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  {/* Plantillas predefinidas */}
+                  <div>
+                    <p className="text-xs font-bold text-gray-600 uppercase mb-2.5">Plantillas Predefinidas:</p>
+                    <div className="space-y-2">
+                      {plantillasPredefinidas[nombreClave].map((plantilla: string, index: number) => (
                         <button
+                          key={index}
                           type="button"
                           onClick={() => aplicarPlantilla(nombreClave, plantilla)}
-                          className="flex-1 text-left px-3 py-2 bg-purple-50 text-gray-700 text-sm rounded-md hover:bg-purple-100 border border-purple-200 transition-colors"
+                          className="block w-full text-left px-4 py-2.5 bg-white border-2 border-blue-200 text-gray-700 text-sm rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-all font-medium"
                         >
                           {plantilla}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => eliminarPlantillaPersonalizada(nombreClave, index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          title="Eliminar plantilla"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-                
-                {!showAddTemplate[nombreClave] ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleAddTemplate(nombreClave)}
-                    className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 font-medium mt-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Agregar nueva plantilla
-                  </button>
-                ) : (
-                  <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
-                    <textarea
-                      value={newTemplate[nombreClave]}
-                      onChange={(e) => setNewTemplate(prev => ({ ...prev, [nombreClave]: e.target.value }))}
-                      rows={2}
-                      placeholder="Escriba la nueva plantilla..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-sm"
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        type="button"
-                        onClick={() => guardarNuevaPlantilla(nombreClave)}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          toggleAddTemplate(nombreClave);
-                          setNewTemplate(prev => ({ ...prev, [nombreClave]: "" }));
-                        }}
-                        className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-400 transition-colors"
-                      >
-                        Cancelar
-                      </button>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  
+                  {/* Plantillas personalizadas */}
+                  {customTemplates[nombreClave].length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-600 uppercase mb-2.5">⭐ Plantillas Personalizadas:</p>
+                      <div className="space-y-2">
+                        {customTemplates[nombreClave].map((plantilla: string, index: number) => (
+                          <div key={index} className="flex items-center gap-2 group">
+                            <button
+                              type="button"
+                              onClick={() => aplicarPlantilla(nombreClave, plantilla)}
+                              className="flex-1 text-left px-4 py-2.5 bg-white border-2 border-purple-200 text-gray-700 text-sm rounded-lg hover:bg-purple-50 hover:border-purple-400 transition-all font-medium"
+                            >
+                              {plantilla}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => eliminarPlantillaPersonalizada(nombreClave, index)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              title="Eliminar plantilla"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Agregar plantilla */}
+                  {!showAddTemplate[nombreClave] ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleAddTemplate(nombreClave)}
+                      className="flex items-center gap-2 text-sm text-green-600 hover:text-green-700 font-semibold bg-green-50 px-3 py-2 rounded-lg transition-all hover:bg-green-100 mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Agregar nueva plantilla
+                    </button>
+                  ) : (
+                    <div className="mt-3 p-4 bg-white border-2 border-green-200 rounded-lg">
+                      <textarea
+                        value={newTemplate[nombreClave]}
+                        onChange={(e) => setNewTemplate(prev => ({ ...prev, [nombreClave]: e.target.value }))}
+                        rows={2}
+                        placeholder="Escriba la nueva plantilla..."
+                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 resize-none text-sm font-medium"
+                      />
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => guardarNuevaPlantilla(nombreClave)}
+                          className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleAddTemplate(nombreClave);
+                            setNewTemplate(prev => ({ ...prev, [nombreClave]: "" }));
+                          }}
+                          className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-400 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -239,7 +257,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     pielFaneras: "",
   });
 
-  // Plantillas personalizadas (se mantienen en la sesión)
   const [customTemplates, setCustomTemplates] = useState<{[key: string]: string[]}>({
     cardiovascular: [],
     respiratorio: [],
@@ -251,7 +268,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     pielFaneras: [],
   });
 
-  // Plantillas predefinidas para cada sistema
   const plantillasPredefinidas = {
     cardiovascular: [
       "Ruidos cardíacos rítmicos, sin soplos ni agregados. Pulsos periféricos simétricos y de buena amplitud.",
@@ -300,7 +316,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
       ...prev,
       [sistema]: !prev[sistema]
     }));
-    // Cerrar formulario de agregar plantilla si está abierto
     if (showAddTemplate[sistema]) {
       setShowAddTemplate(prev => ({
         ...prev,
@@ -351,7 +366,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     }));
   };
 
-  // Calcular IMC automáticamente
   useEffect(() => {
     const peso = parseFloat(data.peso);
     const estaturaMetros = parseFloat(data.estatura) / 100;
@@ -364,25 +378,23 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     }
   }, [data.peso, data.estatura]);
 
-  const getImcCategoria = (imcValue: number): { texto: string; color: string } => {
-    if (imcValue < 18.5) return { texto: "Bajo peso", color: "text-yellow-600" };
-    if (imcValue < 25) return { texto: "Normal", color: "text-green-600" };
-    if (imcValue < 30) return { texto: "Sobrepeso", color: "text-orange-600" };
-    return { texto: "Obesidad", color: "text-red-600" };
+  const getImcCategoria = (imcValue: number): { texto: string; color: string; bgColor: string } => {
+    if (imcValue < 18.5) return { texto: "Bajo peso", color: "text-yellow-700", bgColor: "bg-yellow-50 border-yellow-300" };
+    if (imcValue < 25) return { texto: "Normal", color: "text-green-700", bgColor: "bg-green-50 border-green-300" };
+    if (imcValue < 30) return { texto: "Sobrepeso", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-300" };
+    return { texto: "Obesidad", color: "text-red-700", bgColor: "bg-red-50 border-red-300" };
   };
 
-  // Función para evaluar Frecuencia Cardíaca
   const evaluarFC = (fc: string): AlertInfo | null => {
     const valor = parseFloat(fc);
     if (isNaN(valor) || !fc) return null;
     
-    if (valor < 40) return { level: "warning", message: "Bradicardia (puede ser normal en deportistas de alto rendimiento)" };
+    if (valor < 40) return { level: "warning", message: "Bradicardia (puede ser normal en deportistas)" };
     if (valor > 120) return { level: "critical", message: "Taquicardia severa" };
     if (valor > 100) return { level: "danger", message: "Taquicardia" };
     return { level: "normal", message: "Frecuencia cardíaca normal" };
   };
 
-  // Función para evaluar Presión Arterial
   const evaluarTA = (ta: string): AlertInfo | null => {
     if (!ta || !ta.includes('/')) return null;
     
@@ -392,32 +404,26 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     
     if (isNaN(sistolica) || isNaN(diastolica)) return null;
     
-    // Crisis de hipertensión
     if (sistolica > 180 || diastolica > 120) {
       return { level: "critical", message: "Crisis de hipertensión - Requiere atención inmediata" };
     }
     
-    // Hipertensión Nivel 2
     if (sistolica >= 140 || diastolica >= 90) {
       return { level: "danger", message: "Hipertensión Nivel 2" };
     }
     
-    // Hipertensión Nivel 1
     if ((sistolica >= 130 && sistolica <= 139) || (diastolica > 80 && diastolica <= 89)) {
       return { level: "danger", message: "Hipertensión Nivel 1" };
     }
     
-    // Presión arterial elevada
     if (sistolica >= 120 && sistolica <= 129 && diastolica <= 80) {
       return { level: "warning", message: "Presión arterial elevada" };
     }
     
-    // Hipotensión
     if (sistolica < 80 || diastolica < 60) {
       return { level: "warning", message: "Hipotensión" };
     }
     
-    // Normal
     if (sistolica >= 80 && sistolica <= 120 && diastolica >= 60 && diastolica <= 80) {
       return { level: "normal", message: "Presión arterial normal" };
     }
@@ -425,7 +431,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     return { level: "normal", message: "Presión arterial normal" };
   };
 
-  // Función para evaluar Frecuencia Respiratoria
   const evaluarFR = (fr: string): AlertInfo | null => {
     const valor = parseFloat(fr);
     if (isNaN(valor) || !fr) return null;
@@ -436,7 +441,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     return { level: "normal", message: "Frecuencia respiratoria normal" };
   };
 
-  // Función para evaluar Temperatura
   const evaluarTemperatura = (temp: string): AlertInfo | null => {
     const valor = parseFloat(temp);
     if (isNaN(valor) || !temp) return null;
@@ -448,7 +452,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     return { level: "normal", message: "Temperatura normal" };
   };
 
-  // Función para evaluar Saturación de Oxígeno
   const evaluarSaturacion = (sat: string): AlertInfo | null => {
     const valor = parseFloat(sat);
     if (isNaN(valor) || !sat) return null;
@@ -459,7 +462,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     return { level: "normal", message: "Saturación normal" };
   };
 
-  // Componente para mostrar alertas
   const AlertaBanner = ({ alert }: { alert: AlertInfo }) => {
     const colores = {
       normal: "bg-green-50 border-green-300 text-green-800",
@@ -476,64 +478,37 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
     };
 
     return (
-      <div className={`flex items-center gap-2 mt-2 p-2 rounded-md border ${colores[alert.level]}`}>
-        <AlertTriangle className={`w-4 h-4 ${iconColors[alert.level]}`} />
-        <span className="text-sm font-medium">{alert.message}</span>
+      <div className={`flex items-center gap-2 mt-2 p-3 rounded-lg border-2 ${colores[alert.level]}`}>
+        <AlertTriangle className={`w-4 h-4 ${iconColors[alert.level]} flex-shrink-0`} />
+        <span className="text-sm font-semibold">{alert.message}</span>
       </div>
     );
   };
 
   const categoria = imc ? getImcCategoria(parseFloat(imc)) : null;
 
-  const handleNext = () => {
-    // Validaciones de campos obligatorios
-    if (!data.estatura || parseFloat(data.estatura) <= 0) {
-      alert("Por favor ingrese la estatura (talla)");
-      return;
-    }
-    if (!data.peso || parseFloat(data.peso) <= 0) {
-      alert("Por favor ingrese el peso");
-      return;
-    }
-    if (!data.presionArterial.trim()) {
-      alert("Por favor ingrese la presión arterial (TA)");
-      return;
-    }
-    if (!data.frecuenciaCardiaca || parseFloat(data.frecuenciaCardiaca) <= 0) {
-      alert("Por favor ingrese la frecuencia cardíaca (FC)");
-      return;
-    }
-    if (!data.frecuenciaRespiratoria || parseFloat(data.frecuenciaRespiratoria) <= 0) {
-      alert("Por favor ingrese la frecuencia respiratoria (FR)");
-      return;
-    }
-    if (!data.temperatura || parseFloat(data.temperatura) <= 0) {
-      alert("Por favor ingrese la temperatura (T°)");
-      return;
-    }
-    // Saturación de oxígeno ya NO es obligatoria
-
-    onNext();
-  };
+  // La validación ahora está en HistoriaClinica-CON-ALERTAS.tsx en validateStep()
 
   return (
-    <div className="space-y-6">
-      {/* Título de sección - Antropometría */}
-      <div className="bg-gradient-to-r from-purple-50 to-purple-100/50 p-4 rounded-lg border-l-4 border-purple-500">
-        <div className="flex items-center gap-2">
-          <Weight className="w-5 h-5 text-purple-600" />
-          <h3 className="font-semibold text-purple-900">Medidas Antropométricas</h3>
+    <div className="space-y-8">
+      {/* MEDIDAS ANTROPOMÉTRICAS */}
+      <div className="bg-gradient-to-r from-purple-50 to-purple-100/50 border-l-4 border-purple-500 p-6 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="bg-purple-600 p-2.5 rounded-lg">
+            <Weight className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-lg font-bold text-purple-900">Medidas Antropométricas</h3>
         </div>
       </div>
 
       {/* Talla y Peso */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Talla (cm) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <Ruler className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Ruler className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.estatura}
@@ -541,17 +516,17 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
               placeholder="Ej: 175"
               min="0"
               step="0.1"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 font-medium"
             />
           </div>
         </div>
 
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Peso (kg) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <Weight className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Weight className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.peso}
@@ -559,7 +534,7 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
               placeholder="Ej: 70"
               min="0"
               step="0.1"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 font-medium"
             />
           </div>
         </div>
@@ -567,52 +542,52 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
 
       {/* IMC */}
       <div>
-        <label className="block mb-2 font-medium text-gray-800">Índice de Masa Corporal (IMC)</label>
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-md p-4">
+        <label className="block mb-2.5 font-semibold text-gray-800">Índice de Masa Corporal (IMC)</label>
+        <div className={`border-2 rounded-xl p-6 ${categoria ? categoria.bgColor : 'bg-gray-50 border-gray-300'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-3xl font-semibold text-gray-800">
+              <p className="text-4xl font-bold text-gray-800">
                 {imc ? imc : "-"}
-                {imc && <span className="text-base text-gray-500 ml-2">kg/m²</span>}
+                {imc && <span className="text-lg text-gray-500 ml-3">kg/m²</span>}
               </p>
               {categoria && (
-                <p className={`font-medium mt-1 ${categoria.color}`}>{categoria.texto}</p>
+                <p className={`font-bold mt-2 text-lg ${categoria.color}`}>{categoria.texto}</p>
               )}
             </div>
-            <div className="text-xs text-gray-600 text-right">
-              <p className="font-medium">Cálculo automático</p>
-              <p className="text-gray-500">IMC = Peso / Talla²</p>
+            <div className="text-right">
+              <p className="font-bold text-gray-700">Cálculo Automático</p>
+              <p className="text-sm text-gray-600 mt-1">IMC = Peso / Talla²</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Título de sección - Signos Vitales */}
-      <div className="bg-gradient-to-r from-red-50 to-red-100/50 p-4 rounded-lg border-l-4 border-red-500">
-        <div className="flex items-center gap-2">
-          <Activity className="w-5 h-5 text-red-600" />
-          <h3 className="font-semibold text-red-900">Signos Vitales</h3>
+      {/* SIGNOS VITALES */}
+      <div className="bg-gradient-to-r from-red-50 to-red-100/50 border-l-4 border-red-500 p-6 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="bg-red-600 p-2.5 rounded-lg">
+            <Activity className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-lg font-bold text-red-900">Signos Vitales</h3>
         </div>
       </div>
 
       {/* Presión Arterial */}
       <div>
-        <label className="block mb-2 font-medium text-gray-800">
+        <label className="block mb-2.5 font-semibold text-gray-800">
           Presión Arterial (TA) <span className="text-red-500">*</span>
         </label>
         <div className="relative">
-          <Heart className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
+          <Heart className="absolute left-4 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
           <select
             value={data.presionArterial}
             onChange={(e) => updateData({ presionArterial: e.target.value })}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+            className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 appearance-none bg-white font-medium"
           >
             <option value="">Seleccione TA...</option>
-            {/* Hipotensión */}
             <option value="80/50">80/50 mmHg</option>
             <option value="85/55">85/55 mmHg</option>
             <option value="90/60">90/60 mmHg</option>
-            {/* Normal */}
             <option value="95/65">95/65 mmHg</option>
             <option value="100/65">100/65 mmHg</option>
             <option value="100/70">100/70 mmHg</option>
@@ -626,12 +601,10 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
             <option value="125/80">125/80 mmHg</option>
             <option value="130/80">130/80 mmHg</option>
             <option value="130/85">130/85 mmHg</option>
-            {/* Prehipertensión */}
             <option value="135/85">135/85 mmHg</option>
             <option value="135/90">135/90 mmHg</option>
             <option value="140/85">140/85 mmHg</option>
             <option value="140/90">140/90 mmHg</option>
-            {/* Hipertensión */}
             <option value="145/90">145/90 mmHg</option>
             <option value="150/90">150/90 mmHg</option>
             <option value="150/95">150/95 mmHg</option>
@@ -644,59 +617,59 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
             <option value="200/120">200/120 mmHg</option>
           </select>
         </div>
-        <p className="text-xs text-gray-500 mt-1">Formato: Sistólica/Diastólica (mmHg)</p>
+        <p className="text-xs text-gray-500 mt-2">Formato: Sistólica/Diastólica (mmHg)</p>
         {evaluarTA(data.presionArterial) && <AlertaBanner alert={evaluarTA(data.presionArterial)!} />}
       </div>
 
       {/* Grid de signos vitales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Frecuencia Cardíaca */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* FC */}
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Frecuencia Cardíaca (FC) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <Heart className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Heart className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.frecuenciaCardiaca}
               onChange={(e) => updateData({ frecuenciaCardiaca: e.target.value })}
               placeholder="Ej: 70"
               min="0"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 font-medium"
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1">Latidos por minuto (lpm)</p>
+          <p className="text-xs text-gray-500 mt-2">Latidos por minuto (lpm)</p>
           {evaluarFC(data.frecuenciaCardiaca) && <AlertaBanner alert={evaluarFC(data.frecuenciaCardiaca)!} />}
         </div>
 
-        {/* Frecuencia Respiratoria */}
+        {/* FR */}
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Frecuencia Respiratoria (FR) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <Wind className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Wind className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.frecuenciaRespiratoria}
               onChange={(e) => updateData({ frecuenciaRespiratoria: e.target.value })}
               placeholder="Ej: 16"
               min="0"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 font-medium"
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1">Respiraciones por minuto (rpm)</p>
+          <p className="text-xs text-gray-500 mt-2">Respiraciones por minuto (rpm)</p>
           {evaluarFR(data.frecuenciaRespiratoria) && <AlertaBanner alert={evaluarFR(data.frecuenciaRespiratoria)!} />}
         </div>
 
         {/* Temperatura */}
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Temperatura (T°) <span className="text-red-500">*</span>
           </label>
           <div className="relative">
-            <Thermometer className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Thermometer className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.temperatura}
@@ -704,20 +677,20 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
               placeholder="Ej: 36.5"
               min="0"
               step="0.1"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 font-medium"
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1">Grados Celsius (°C)</p>
+          <p className="text-xs text-gray-500 mt-2">Grados Celsius (°C)</p>
           {evaluarTemperatura(data.temperatura) && <AlertaBanner alert={evaluarTemperatura(data.temperatura)!} />}
         </div>
 
-        {/* Saturación de Oxígeno */}
+        {/* SpO2 */}
         <div>
-          <label className="block mb-2 font-medium text-gray-800">
+          <label className="block mb-2.5 font-semibold text-gray-800">
             Saturación de Oxígeno (SpO₂)
           </label>
           <div className="relative">
-            <Droplets className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Droplets className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
             <input
               type="number"
               value={data.saturacionOxigeno}
@@ -725,24 +698,26 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
               placeholder="Ej: 98"
               min="0"
               max="100"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 font-medium"
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1">Porcentaje (%)</p>
+          <p className="text-xs text-gray-500 mt-2">Porcentaje (%)</p>
           {evaluarSaturacion(data.saturacionOxigeno) && <AlertaBanner alert={evaluarSaturacion(data.saturacionOxigeno)!} />}
         </div>
       </div>
 
-      {/* Título de sección - Evaluación por Sistemas */}
-      <div className="bg-gradient-to-r from-green-50 to-green-100/50 p-4 rounded-lg border-l-4 border-green-500">
-        <div className="flex items-center gap-2">
-          <Activity className="w-5 h-5 text-green-600" />
-          <h3 className="font-semibold text-green-900">Exploración Física por Sistemas</h3>
+      {/* EXPLORACIÓN POR SISTEMAS */}
+      <div className="bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-l-4 border-indigo-500 p-6 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-600 p-2.5 rounded-lg">
+            <Activity className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-lg font-bold text-indigo-900">Exploración Física por Sistemas</h3>
         </div>
       </div>
 
-      {/* Exploración por sistemas */}
-      <div className="space-y-4">
+      {/* Grid de sistemas */}
+      <div className="grid grid-cols-1 gap-6">
         <SistemaExploracion 
           nombre="Sistema Cardiovascular"
           nombreClave="cardiovascular"
@@ -902,25 +877,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
           guardarNuevaPlantilla={guardarNuevaPlantilla}
           eliminarPlantillaPersonalizada={eliminarPlantillaPersonalizada}
         />
-      </div>
-
-      {/* Botones de navegación */}
-      <div className="flex justify-between items-center pt-6 border-t border-gray-200">
-        <button
-          onClick={onPrevious}
-          className="flex items-center gap-2 px-6 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Anterior
-        </button>
-
-        <button
-          onClick={handleNext}
-          className="flex items-center gap-2 px-6 py-2 bg-[#1F4788] text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Siguiente
-          <ChevronRight className="w-5 h-5" />
-        </button>
       </div>
     </div>
   );
