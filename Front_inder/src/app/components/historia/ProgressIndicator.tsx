@@ -3,19 +3,35 @@ import { Check } from "lucide-react";
 type ProgressIndicatorProps = {
   currentStep: number;
   totalSteps: number;
+  necesitaPruebas?: boolean;
 };
 
-const stepLabels = [
-  "Evaluación",
-  "Antecedentes Médicos",
-  "Revisión por Sistemas",
-  "Exploración Física",
-  "Pruebas Complementarias",
-  "Diagnóstico",
-  "Plan de Tratamiento",
-];
+export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = false }: ProgressIndicatorProps) {
+  const getStepLabels = () => {
+    if (necesitaPruebas) {
+      return [
+        "Evaluación",
+        "Antecedentes Médicos",
+        "Revisión por Sistemas",
+        "Exploración Física",
+        "Pruebas Complementarias",
+        "Diagnóstico",
+        "Plan de Tratamiento",
+      ];
+    } else {
+      return [
+        "Evaluación",
+        "Antecedentes Médicos",
+        "Revisión por Sistemas",
+        "Exploración Física",
+        "Diagnóstico",
+        "Plan de Tratamiento",
+      ];
+    }
+  };
 
-export function ProgressIndicator({ currentStep, totalSteps }: ProgressIndicatorProps) {
+  const stepLabels = getStepLabels();
+
   return (
     <div className="mb-8">
       {/* Indicador textual */}
@@ -35,7 +51,7 @@ export function ProgressIndicator({ currentStep, totalSteps }: ProgressIndicator
 
           return (
             <div key={stepNumber} className="flex items-center flex-1">
-              {/* Círculo del paso */}
+              {/* Cálculo del paso */}
               <div className="flex flex-col items-center">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
@@ -61,7 +77,7 @@ export function ProgressIndicator({ currentStep, totalSteps }: ProgressIndicator
                 </span>
               </div>
 
-              {/* Línea conectora */}
+              {/* Lí­nea conectora */}
               {stepNumber < totalSteps && (
                 <div
                   className={`h-1 flex-1 mx-2 transition-all ${

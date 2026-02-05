@@ -38,7 +38,17 @@ export type HistoriaClinicaData = {
   alergias: AlergiaSeleccionada[];
   tomaMedicacion: boolean;
   medicacionActual: string;
-  vacunas: string[];
+  vacunas?: Array<{
+    id?: string;
+    nombre_vacuna: string;
+    fecha_administracion?: string;
+    observaciones?: string;
+    archivo?: File;
+    nombre_archivo?: string;
+    ruta_archivo?: string;
+    tipo_archivo?: string;
+    es_nueva?: boolean;
+  }>;
   revisionSistemas: {
     cardiovascular: { estado: "normal" | "anormal" | ""; observaciones: string };
     respiratorio: { estado: "normal" | "anormal" | ""; observaciones: string };
@@ -66,6 +76,7 @@ export type HistoriaClinicaData = {
     endocrino: { estado: "normal" | "anormal" | ""; observaciones: string };
     pielFaneras: { estado: "normal" | "anormal" | ""; observaciones: string };
   };
+  necesitaPruebas?: boolean;
   ayudasDiagnosticas: Array<{ categoria: string; nombrePrueba: string; codigoCUPS: string; resultado: string; archivosAdjuntos: File[] }>;
   analisisObjetivoDiagnostico: string;
   impresionDiagnostica: string;
@@ -97,21 +108,25 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
     const saved = localStorage.getItem(`historia_clinica_${deportista.id}`);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return { ...parsed, deportista_id: deportista.id };
       } catch (e) {
         console.error('Error al cargar datos guardados:', e);
       }
     }
-    return getInitialFormData();
+    return { ...getInitialFormData(), deportista_id: deportista.id };
   });
 
-  const totalSteps = 7;
+  // Calcular total de pasos dinámicamente
+  const totalStepsBase = 6; // Evaluación, Antecedentes, Revisión, Exploración, Diagnóstico, Plan
+  const totalSteps = formData.necesitaPruebas ? totalStepsBase + 1 : totalStepsBase;
 
   function getInitialFormData(): HistoriaClinicaData {
     return {
       tipoCita: "",
       motivoConsulta: "",
       enfermedadActual: "",
+      deportista_id: "",
       antecedentesPersonales: [],
       antecedentesFamiliares: [],
       lesionesDeportivas: false,
@@ -151,6 +166,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
         endocrino: { estado: "normal", observaciones: "" },
         pielFaneras: { estado: "normal", observaciones: "" },
       },
+      necesitaPruebas: false,
       ayudasDiagnosticas: [],
       analisisObjetivoDiagnostico: "",
       impresionDiagnostica: "",
@@ -170,13 +186,17 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
     return () => clearTimeout(timer);
   }, [formData, deportista.id]);
 
+  // Auto-scroll al cambiar de paso
+  useEffect(() => {
+    window.scrollTo({ 
+      top: 0, 
+      behavior: 'smooth'
+    });
+  }, [currentStep]);
+
   const updateFormData = (data: Partial<HistoriaClinicaData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
   };
-
-  // ============================================================================
-  // VALIDACIONES POR PASO
-  // ============================================================================
 
   const validateStep = (step: number): boolean => {
     switch (step) {
@@ -192,10 +212,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
         return true;
 
       case 2: // Antecedentes Médicos
-        if (formData.antecedentesPersonales.length === 0 && formData.antecedentesFamiliares.length === 0) {
-          showAlert('error', 'Antecedentes requeridos', 'Por favor agregue al menos un antecedente (personal o familiar)');
-          return false;
-        }
         if (formData.tomaMedicacion && !formData.medicacionActual?.trim()) {
           showAlert('error', 'Campo requerido', 'Por favor especifique la medicación actual');
           return false;
@@ -243,7 +259,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
         return true;
 
       case 4: // Exploración Física
-        // Validar Estatura
         if (!formData.estatura || formData.estatura.toString().trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese la estatura (cm)');
           return false;
@@ -254,7 +269,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar Peso
         if (!formData.peso || formData.peso.toString().trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese el peso (kg)');
           return false;
@@ -265,13 +279,11 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar Presión Arterial
         if (!formData.presionArterial || formData.presionArterial.trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese la presión arterial (TA)');
           return false;
         }
 
-        // Validar Frecuencia Cardíaca
         if (!formData.frecuenciaCardiaca || formData.frecuenciaCardiaca.toString().trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese la frecuencia cardíaca (FC)');
           return false;
@@ -282,7 +294,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar Frecuencia Respiratoria
         if (!formData.frecuenciaRespiratoria || formData.frecuenciaRespiratoria.toString().trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese la frecuencia respiratoria (FR)');
           return false;
@@ -293,7 +304,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar Temperatura
         if (!formData.temperatura || formData.temperatura.toString().trim() === '') {
           showAlert('error', 'Campo requerido', 'Por favor ingrese la temperatura (T°)');
           return false;
@@ -304,7 +314,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar TODOS los sistemas (obligatorio)
         const sistemas4 = ['cardiovascular', 'respiratorio', 'digestivo', 'neurologico', 'musculoesqueletico', 'genitourinario', 'endocrino', 'pielFaneras'];
         const noEvaluados4 = sistemas4.filter(
           (s) => !(formData.exploracionSistemas as any)[s].estado
@@ -314,7 +323,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           return false;
         }
 
-        // Validar que TODOS los sistemas tengan observaciones (normal O anormal)
         const anormalesSinObs4 = sistemas4.filter(
           (s) => {
             const sistema = (formData.exploracionSistemas as any)[s];
@@ -327,10 +335,10 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
         }
         return true;
 
-      case 5: // Pruebas Complementarias
+      case 5: // Revisión de Pruebas (opcional)
         return true;
 
-      case 6: // Diagnóstico
+      case 6: // Diagnóstico (paso 6 cuando hay pruebas, paso 5 cuando no)
         if (!formData.analisisObjetivoDiagnostico?.trim()) {
           showAlert('error', 'Campo requerido', 'Por favor complete el Análisis Objetivo');
           return false;
@@ -368,14 +376,12 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
 
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -423,7 +429,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(7)) {
+    if (!validateStep(totalSteps)) {
       return;
     }
 
@@ -463,15 +469,11 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
               localStorage.setItem('citasActualizadas_timestamp', new Date().toISOString());
               localStorage.setItem('citasActualizadas_deportista', deportista.id);
               
-              showAlert('success', 'Historia guardada', 'La historia clínica ha sido guardada correctamente.', {
-                duration: 2000,
+              showAlert('success', 'Historia guardada', 'La historia clínica ha sido guardada correctamente. Puede continuar editando o hacer clic en Salir para finalizar.', {
+                duration: 3000,
               });
               
               onSuccess?.(response.historia_clinica_id || response.id);
-              
-              setTimeout(() => {
-                onBack?.();
-              }, 2000);
               
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : "Error desconocido";
@@ -500,13 +502,112 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
     }
   };
 
+  // Mapeo dinámico de pasos
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <Evaluacion 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onCancel={handleCancel}
+          />
+        );
+      case 2:
+        return (
+          <AntecedentesMedicos 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        );
+      case 3:
+        return (
+          <RevisionSistemas 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        );
+      case 4:
+        return (
+          <ExploracionFisicaConPruebas
+            data={formData}
+            updateData={updateFormData}
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        );
+      case 5:
+        return formData.necesitaPruebas ? (
+          <PruebasComplementarias 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        ) : (
+          <Diagnostico 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        );
+      case 6:
+        return formData.necesitaPruebas ? (
+          <Diagnostico 
+            data={formData} 
+            updateData={updateFormData} 
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        ) : (
+          <PlanTratamiento 
+            data={formData} 
+            updateData={updateFormData} 
+            onSave={handleSubmit}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+            onPrint={handlePrint}
+            historiaId={historiaGuardadaId || ''}
+            deportista={deportista}
+            historia={null}
+          />
+        );
+      case 7:
+        return formData.necesitaPruebas ? (
+          <PlanTratamiento 
+            data={formData} 
+            updateData={updateFormData} 
+            onSave={handleSubmit}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+            onPrint={handlePrint}
+            historiaId={historiaGuardadaId || ''}
+            deportista={deportista}
+            historia={null}
+          />
+        ) : null;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Alert Modal */}
       {AlertModal}
 
       <div className="bg-white rounded-lg shadow-md p-8">
-        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           {onBack && (
             <button
@@ -525,80 +626,16 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           </div>
         </div>
 
-        {/* Progress Indicator */}
-        <ProgressIndicator currentStep={currentStep} totalSteps={totalSteps} />
+        <ProgressIndicator 
+        currentStep={currentStep} 
+        totalSteps={totalSteps}
+        necesitaPruebas={formData.necesitaPruebas}
+        />
 
-        {/* Contenido del paso actual */}
         <div className="bg-gray-50 rounded-lg p-8 mb-8">
-          {currentStep === 1 && (
-            <Evaluacion 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 2 && (
-            <AntecedentesMedicos 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 3 && (
-            <RevisionSistemas 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 4 && (
-            <ExploracionFisica 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 5 && (
-            <PruebasComplementarias 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 6 && (
-            <Diagnostico 
-              data={formData} 
-              updateData={updateFormData} 
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-            />
-          )}
-          {currentStep === 7 && (
-            <PlanTratamiento 
-              data={formData} 
-              updateData={updateFormData} 
-              onSave={handleSubmit}
-              onPrevious={handlePrevious}
-              onCancel={handleCancel}
-              onPrint={handlePrint}
-              historiaId={historiaGuardadaId}
-              deportista={deportista}
-              historia={null}
-            />
-          )}
+          {renderStep()}
         </div>
 
-        {/* Botones de navegación */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="flex gap-4 w-full sm:w-auto">
             {currentStep > 1 && (
@@ -641,7 +678,6 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           </div>
         </div>
 
-        {/* Info Box */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800">
@@ -649,6 +685,76 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           </p>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Wrapper para Exploración Física con opción de Revisión de Pruebas
+const ExploracionFisicaConPruebas: React.FC<{
+  data: HistoriaClinicaData;
+  updateData: (data: Partial<HistoriaClinicaData>) => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  onCancel?: () => void;
+}> = ({ data, updateData, onNext, onPrevious, onCancel }) => {
+  const [mostrarPregunta, setMostrarPregunta] = useState(true);
+
+  const handleSiguiente = () => {
+    onNext();
+    setMostrarPregunta(false);
+  };
+
+  if (mostrarPregunta) {
+    return (
+      <div className="space-y-6">
+        <ExploracionFisica 
+          data={data} 
+          updateData={updateData} 
+          onNext={() => setMostrarPregunta(false)}
+          onPrevious={onPrevious}
+          onCancel={onCancel}
+        />
+
+        <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-xl">
+          <h3 className="font-semibold text-blue-900 mb-4">¿Desea realizar Revisión de Pruebas?</h3>
+          <p className="text-gray-700 mb-4">La revisión de pruebas es opcional. ¿Necesita agregar pruebas complementarias para este deportista?</p>
+          
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                updateData({ necesitaPruebas: false });
+                handleSiguiente();
+              }}
+              className="flex-1 px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-semibold"
+            >
+              No, continuar sin pruebas
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                updateData({ necesitaPruebas: true });
+                handleSiguiente();
+              }}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+            >
+              Sí, agregar pruebas
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <ExploracionFisica 
+        data={data} 
+        updateData={updateData} 
+        onNext={handleSiguiente}
+        onPrevious={onPrevious}
+        onCancel={onCancel}
+      />
     </div>
   );
 };

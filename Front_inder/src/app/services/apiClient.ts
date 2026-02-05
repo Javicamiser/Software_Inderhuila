@@ -132,6 +132,7 @@ export interface HistoriaClinica {
   deportista_id: string;
   fecha_apertura: string;
   created_at?: string;
+  tipo_cita?: string;
   deportista?: Deportista;
   grupos?: RespuestaGrupo[];
   respuestas?: FormularioRespuesta[];

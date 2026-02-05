@@ -1,55 +1,107 @@
 import { useState, useEffect } from 'react';
-import { historiaClinicaService } from '../services/apiClient';
+import { deportistasService, historiaClinicaService } from '../services/apiClient';
 import { toast } from 'sonner';
-import { Plus, Trash2, Eye, Search } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Search, Loader, Eye, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+interface HistoriaDeportista {
+  id: string;
+  fecha_apertura: string;
+  created_at: string;
+  tipo_cita?: string;
+}
+
+interface DeportistaConHistorias {
+  id: string;
+  nombres: string;
+  apellidos: string;
+  numero_documento: string;
+  email?: string;
+  telefono?: string;
+  tipo_deporte?: string;
+  historias: HistoriaDeportista[];
+  expandido: boolean;
+}
 
 interface ListadoHistoriaClinicaProps {
   onNavigate?: (view: string) => void;
 }
 
 export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaProps) {
-  const [historias, setHistorias] = useState<any[]>([]);
+  const [deportistas, setDeportistas] = useState<DeportistaConHistorias[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    cargarHistorias();
-  }, [page]);
+    cargarDatos();
+  }, []);
 
-  const cargarHistorias = async () => {
+  const cargarDatos = async () => {
     try {
       setIsLoading(true);
-      const response = await historiaClinicaService.getAll(page, 10);
       
-      // Manejo de respuesta con paginación
-      if (Array.isArray(response)) {
-        setHistorias(response);
-      } else if (response.items) {
-        setHistorias(response.items);
-        setTotalPages(response.total_pages || 1);
+      // Cargar deportistas
+      const respDeportistas = await deportistasService.getAll(1, 10000);
+      let deportistasArray: any[] = [];
+      
+      if (Array.isArray(respDeportistas)) {
+        deportistasArray = respDeportistas;
+      } else if (respDeportistas && typeof respDeportistas === 'object') {
+        if ('items' in respDeportistas && Array.isArray((respDeportistas as any).items)) {
+          deportistasArray = (respDeportistas as any).items;
+        }
       }
+
+      // Cargar historias clínicas
+      const respHistorias = await historiaClinicaService.getAll(1, 10000);
+      let historiasArray: any[] = [];
+      
+      if (Array.isArray(respHistorias)) {
+        historiasArray = respHistorias;
+      } else if (respHistorias && typeof respHistorias === 'object') {
+        if ('items' in respHistorias && Array.isArray((respHistorias as any).items)) {
+          historiasArray = (respHistorias as any).items;
+        }
+      }
+
+      // Agrupar historias por deportista
+      const deportistasConHistorias: DeportistaConHistorias[] = deportistasArray.map(depo => {
+        const historiasDepo = historiasArray.filter(hist => hist.deportista_id === depo.id);
+        return {
+          ...depo,
+          historias: historiasDepo.sort((a, b) => 
+            new Date(b.fecha_apertura).getTime() - new Date(a.fecha_apertura).getTime()
+          ),
+          expandido: false
+        };
+      }).filter(depo => depo.historias.length > 0);
+
+      setDeportistas(deportistasConHistorias);
     } catch (error) {
-      toast.error('Error cargando historias clínicas');
+      toast.error('Error cargando datos');
       console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEliminar = async (id: string, deportista: any) => {
-    if (!window.confirm(`¿Eliminar la historia clínica de ${deportista?.nombres || 'este deportista'}? Esta acción no se puede deshacer.`)) {
+  const toggleExpandido = (id: string) => {
+    setDeportistas(deportistas.map(depo => 
+      depo.id === id ? { ...depo, expandido: !depo.expandido } : depo
+    ));
+  };
+
+  const handleEliminarHistoria = async (historiaId: string, deportistaNombre: string) => {
+    if (!window.confirm(`¿Eliminar esta historia clínica de ${deportistaNombre}? Esta acción no se puede deshacer.`)) {
       return;
     }
 
     try {
       setIsLoading(true);
-      await historiaClinicaService.delete(id);
+      await historiaClinicaService.delete(historiaId);
       toast.success('Historia clínica eliminada correctamente');
-      cargarHistorias();
+      cargarDatos();
     } catch (error) {
       toast.error('Error al eliminar historia clínica');
       console.error(error);
@@ -58,16 +110,29 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
     }
   };
 
-  const historiasFiltradas = historias.filter((historia) => {
+  const deportistasFiltrados = deportistas.filter((depo) => {
     const query = searchQuery.toLowerCase();
-    const deportista = historia.deportista;
     return (
-      !deportista ||
-      deportista.nombres?.toLowerCase().includes(query) ||
-      deportista.apellidos?.toLowerCase().includes(query) ||
-      deportista.numero_documento?.includes(query)
+      depo.nombres.toLowerCase().includes(query) ||
+      depo.apellidos.toLowerCase().includes(query) ||
+      depo.numero_documento.includes(query)
     );
   });
+
+  const getTipoHistoria = (historia: any): string => {
+    return historia.tipo_cita || 'Control';
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -106,104 +171,120 @@ export function ListadoHistoriaClinica({ onNavigate }: ListadoHistoriaClinicaPro
           </div>
         </div>
 
-        {/* TABLA */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div 
-                className="animate-spin rounded-full h-12 w-12 border-b-2"
-                style={{ borderColor: '#0369A1' }}
-              ></div>
-              <span className="ml-4 text-gray-600">Cargando historias clínicas...</span>
-            </div>
-          ) : historiasFiltradas.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <p>No hay historias clínicas que coincidan con tu búsqueda</p>
+        {/* LISTADO DE DEPORTISTAS */}
+        <div className="space-y-4">
+          {deportistasFiltrados.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <p className="text-gray-600">
+                {searchQuery ? 'No hay deportistas que coincidan con tu búsqueda' : 'No hay historias clínicas registradas'}
+              </p>
             </div>
           ) : (
-            <>
-              <table className="w-full">
-                <thead style={{ backgroundColor: '#0369A1' }} className="text-white">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Deportista</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Documento</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Fecha Apertura</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Fecha Creación</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historiasFiltradas.map((historia, idx) => {
-                    const deportista = historia.deportista;
-                    const nombreDeportista = deportista
-                      ? `${deportista.nombres} ${deportista.apellidos}`
-                      : 'Deportista no encontrado';
+            deportistasFiltrados.map((depo) => (
+              <div key={depo.id} className="bg-white rounded-lg shadow overflow-hidden">
+                {/* ENCABEZADO DEL DEPORTISTA */}
+                <button
+                  onClick={() => toggleExpandido(depo.id)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  style={{ backgroundColor: depo.expandido ? '#F0F9FF' : 'white' }}
+                >
+                  <div className="flex items-center gap-4 flex-1 text-left">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ backgroundColor: '#0369A1' }}
+                    >
+                      {depo.nombres.charAt(0)}{depo.apellidos.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {depo.nombres} {depo.apellidos}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Doc: {depo.numero_documento} • {depo.historias.length} historia(s)
+                      </p>
+                    </div>
+                  </div>
+                  {depo.expandido ? (
+                    <ChevronUp className="w-5 h-5 text-gray-600" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-600" />
+                  )}
+                </button>
 
-                    return (
-                      <tr 
-                        key={historia.id} 
-                        className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
-                      >
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{nombreDeportista}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {deportista?.numero_documento || '-'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {historia.fecha_apertura ? format(new Date(historia.fecha_apertura), 'd MMMM yyyy', { locale: es }) : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {historia.created_at ? format(new Date(historia.created_at), 'd MMMM yyyy HH:mm', { locale: es }) : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex gap-2 justify-center">
-                            <button
-                              onClick={() => onNavigate?.(`historia-vista-${historia.id}`)}
-                              style={{ color: '#0369A1' }}
-                              className="hover:bg-blue-100 p-2 rounded transition-colors"
-                              title="Ver detalles"
+                {/* HISTORIAS DEL DEPORTISTA */}
+                {depo.expandido && (
+                  <div className="border-t border-gray-200">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead style={{ backgroundColor: '#E0F2FE' }}>
+                          <tr>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Tipo</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Fecha Apertura</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Fecha Creación</th>
+                            <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {depo.historias.map((historia, idx) => (
+                            <tr
+                              key={historia.id}
+                              className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                             >
-                              <Eye className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleEliminar(historia.id, deportista)}
-                              className="text-red-600 hover:bg-red-100 p-2 rounded transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {/* PAGINACIÓN */}
-              {totalPages > 1 && (
-                <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-t">
-                  <button
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded disabled:opacity-50"
-                  >
-                    Anterior
-                  </button>
-                  <span className="text-gray-600">
-                    Página {page} de {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage(Math.min(totalPages, page + 1))}
-                    disabled={page === totalPages}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded disabled:opacity-50"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              )}
-            </>
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold" 
+                                  style={{
+                                    backgroundColor: 'rgba(3, 105, 161, 0.1)',
+                                    color: '#0369A1'
+                                  }}
+                                >
+                                  {getTipoHistoria(historia)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {historia.fecha_apertura ? format(new Date(historia.fecha_apertura), 'd MMM yyyy', { locale: es }) : '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {historia.created_at ? format(new Date(historia.created_at), 'd MMM yyyy HH:mm', { locale: es }) : '-'}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <div className="flex gap-2 justify-center">
+                                  <button
+                                    onClick={() => onNavigate?.(`historia-vista-${historia.id}`)}
+                                    style={{ color: '#0369A1' }}
+                                    className="hover:bg-blue-100 p-2 rounded transition-colors"
+                                    title="Ver historia"
+                                  >
+                                    <Eye className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEliminarHistoria(historia.id, `${depo.nombres} ${depo.apellidos}`)}
+                                    className="text-red-600 hover:bg-red-100 p-2 rounded transition-colors"
+                                    title="Eliminar historia"
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
+
+        {/* INFORMACIÓN DE RESULTADOS */}
+        {deportistasFiltrados.length > 0 && (
+          <div className="mt-6 bg-white rounded-lg shadow p-4">
+            <p className="text-sm text-gray-600">
+              Mostrando <strong>{deportistasFiltrados.length}</strong> deportista(s) con historias clínicas
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

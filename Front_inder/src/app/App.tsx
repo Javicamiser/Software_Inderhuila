@@ -34,6 +34,13 @@ export default function App() {
     }
   }, []);
 
+  // ========================================
+  // AUTO-SCROLL AL CAMBIAR DE VISTA ✅
+  // ========================================
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentView]);
+
   const handleSelectDeportista = (deportista: Deportista) => {
     setSelectedDeportista(deportista);
     setSelectedDeportistaId(deportista.id);

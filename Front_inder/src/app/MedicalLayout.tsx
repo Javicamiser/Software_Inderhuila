@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MedicalSidebar from './MedicalSidebar';
 import MedicalTopBar from './MedicalTopBar';
 import '../styles/medical-layout.css';
@@ -15,6 +15,19 @@ export default function MedicalLayout({
   onNavigate,
 }: MedicalLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // AUTO-SCROLL AL CAMBIAR DE VISTA
+  useEffect(() => {
+    // Scroll del window
+    window.scrollTo(0, 0);
+    
+    // Scroll del contenedor de contenido si existe
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+      contentRef.current.scrollLeft = 0;
+    }
+  }, [currentView]);
 
   return (
     <div className="medical-layout">
@@ -29,7 +42,7 @@ export default function MedicalLayout({
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         />
         
-        <div className="medical-content">
+        <div className="medical-content" ref={contentRef}>
           {children}
         </div>
       </div>

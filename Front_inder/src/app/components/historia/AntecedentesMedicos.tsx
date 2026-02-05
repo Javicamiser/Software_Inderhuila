@@ -1,9 +1,21 @@
 import { useState } from "react";
 import { HistoriaClinicaData } from "../HistoriaClinica";
 import ComponenteAlergias from './ComponenteAlergias';
-import VacunasHistoriaClinica from '../VacunasHistoriaClinica';
+import VacunasConArchivos from '../VacunasConArchivos';
 import { ChevronRight, ChevronLeft, Plus, Trash2, User, Users, AlertCircle } from "lucide-react";
 import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre, buscarPorCodigoParcial } from "./cie11Database";
+
+type VacunaConArchivo = {
+  id?: string;
+  nombre_vacuna: string;
+  fecha_administracion?: string;
+  observaciones?: string;
+  archivo?: File;
+  nombre_archivo?: string;
+  ruta_archivo?: string;
+  tipo_archivo?: string;
+  es_nueva?: boolean;
+};
 
 type Props = {
   data: HistoriaClinicaData;
@@ -768,8 +780,10 @@ export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCa
           Aquí se muestran las vacunas registradas del deportista. Puede agregar nuevas vacunas, cargar certificados y descargar archivos.
         </p>
         {data.deportista_id && typeof data.deportista_id === 'string' ? (
-          <VacunasHistoriaClinica 
+          <VacunasConArchivos
             deportista_id={data.deportista_id}
+            vacunas={data.vacunas || []}
+            onChangeVacunas={(vacunas: VacunaConArchivo[]) => updateData({ vacunas })}
             readonly={false}
           />
         ) : (

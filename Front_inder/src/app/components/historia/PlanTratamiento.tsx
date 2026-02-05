@@ -1,6 +1,6 @@
 import { HistoriaClinicaData } from "../HistoriaClinica";
-import { Download, Mail, MessageCircle, Printer, X } from "lucide-react";
-import { useState } from "react";
+import { Download, Mail, MessageCircle, Printer, X, Plus, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useMemo } from "react";
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -15,6 +15,20 @@ type Remision = {
   motivo: string;
   prioridad: "Normal" | "Urgente";
   fechaRemision: string;
+};
+
+type Receta = {
+  categoria: string;
+  nombrePrueba: string;
+  codigoCUPS: string;
+  resultado: string;
+  archivosAdjuntos: File[];
+};
+
+type PruebaAyuda = {
+  id?: string;
+  codigoCUPS: string;
+  nombre: string;
 };
 
 type Props = {
@@ -38,6 +52,25 @@ const especialistas = [
   "Médico Ortopedista"
 ];
 
+// Base de datos de CUPS
+const CUPS_DATABASE = [
+  { codigo: "80101", nombre: "Hemograma completo" },
+  { codigo: "80102", nombre: "Química sanguínea" },
+  { codigo: "71010", nombre: "Radiografía de cadera" },
+  { codigo: "71015", nombre: "Radiografía de rodilla" },
+  { codigo: "71020", nombre: "Radiografía de tobillo" },
+  { codigo: "76080", nombre: "Resonancia magnética de rodilla" },
+  { codigo: "76085", nombre: "Resonancia magnética de hombro" },
+  { codigo: "92030", nombre: "Electrocardiograma" },
+  { codigo: "76010", nombre: "Ecografía abdominal" },
+  { codigo: "92035", nombre: "Prueba de esfuerzo" },
+  { codigo: "76050", nombre: "Ultrasonido de hombro" },
+  { codigo: "71025", nombre: "Tomografía de tobillo" },
+  { codigo: "80105", nombre: "Prueba de glucosa" },
+  { codigo: "80110", nombre: "Análisis de lípidos" },
+  { codigo: "76012", nombre: "Ecografía de cadera" },
+];
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export function PlanTratamiento({
@@ -51,15 +84,133 @@ export function PlanTratamiento({
   deportista,
   historia,
 }: Props) {
-  const [interconsultas, setInterconsultas] = useState<Interconsulta[]>(data.remisionesEspecialistas?.filter((r) => r.prioridad === "Normal") || []);
-  const [remisiones, setRemisiones] = useState<Remision[]>(data.remisionesEspecialistas?.filter((r) => r.prioridad === "Urgente") || []);
-  
+  // Estado para Interconsultas y Remisiones
+  const [interconsultas, setInterconsultas] = useState<Interconsulta[]>(
+    data.remisionesEspecialistas?.filter((r) => r.prioridad === "Normal") || []
+  );
+  const [remisiones, setRemisiones] = useState<Remision[]>(
+    data.remisionesEspecialistas?.filter((r) => r.prioridad === "Urgente") || []
+  );
   const [nuevaInterconsulta, setNuevaInterconsulta] = useState({ especialista: "", motivo: "" });
-  const [nuevaRemision, setNuevaRemision] = useState({ especialista: "", motivo: "", prioridad: "Urgente" as "Normal" | "Urgente", fechaRemision: new Date().toISOString().split('T')[0] });
+  const [nuevaRemision, setNuevaRemision] = useState({ 
+    especialista: "", 
+    motivo: "", 
+    prioridad: "Urgente" as "Normal" | "Urgente", 
+    fechaRemision: new Date().toISOString().split('T')[0] 
+  });
 
+  // Estado para Recetas
+  const [recetas, setRecetas] = useState<Receta[]>(data.ayudasDiagnosticas || []);
+  const [mostrarFormReceta, setMostrarFormReceta] = useState(false);
+  const [nuevaReceta, setNuevaReceta] = useState<Receta>({
+    categoria: "Medicamento",
+    nombrePrueba: "",
+    codigoCUPS: "",
+    resultado: "",
+    archivosAdjuntos: []
+  });
+
+  // Estado para Pruebas
+  const [pruebas, setPruebas] = useState<PruebaAyuda[]>([]);
+  const [mostrarFormPrueba, setMostrarFormPrueba] = useState(false);
+  const [buscarPrueba, setBuscarPrueba] = useState("");
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [nuevaPrueba, setNuevaPrueba] = useState<PruebaAyuda>({ codigoCUPS: "", nombre: "" });
+
+  // Estado para controlar secciones colapsadas
+  const [seccionesAbiertas, setSeccionesAbiertas] = useState({
+    recetas: false,
+    interconsultas: false,
+    remisiones: false,
+    pruebas: false
+  });
+
+  // Descargas y envíos
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+
+  // Filtrar CUPS según búsqueda
+  const cupsSugeridos = useMemo(() => {
+    if (buscarPrueba.length < 2) return [];
+    const search = buscarPrueba.toLowerCase();
+    return CUPS_DATABASE.filter(cup => 
+      cup.nombre.toLowerCase().includes(search) || 
+      cup.codigo.includes(search)
+    ).slice(0, 8);
+  }, [buscarPrueba]);
+
+  // ============================================================================
+  // RECETAS
+  // ============================================================================
+
+  const agregarReceta = () => {
+    if (!nuevaReceta.nombrePrueba.trim() || !nuevaReceta.codigoCUPS.trim()) {
+      toast.error("Complete el nombre y código de la receta");
+      return;
+    }
+
+    const recetaAgregada: Receta = {
+      ...nuevaReceta,
+      categoria: "Medicamento"
+    };
+
+    setRecetas([...recetas, recetaAgregada]);
+    setNuevaReceta({ 
+      categoria: "Medicamento",
+      nombrePrueba: "",
+      codigoCUPS: "",
+      resultado: "",
+      archivosAdjuntos: []
+    });
+    setMostrarFormReceta(false);
+    updateData({ ayudasDiagnosticas: [...recetas, recetaAgregada] });
+    toast.success("Receta agregada correctamente");
+  };
+
+  const eliminarReceta = (index: number) => {
+    const nuevasRecetas = recetas.filter((_, i) => i !== index);
+    setRecetas(nuevasRecetas);
+    updateData({ ayudasDiagnosticas: nuevasRecetas });
+    toast.success("Receta eliminada");
+  };
+
+  // ============================================================================
+  // PRUEBAS
+  // ============================================================================
+
+  const agregarPrueba = () => {
+    if (!nuevaPrueba.codigoCUPS.trim() || !nuevaPrueba.nombre.trim()) {
+      toast.error("Seleccione o ingrese una prueba");
+      return;
+    }
+
+    const pruebaAgregada: PruebaAyuda = {
+      id: Date.now().toString(),
+      ...nuevaPrueba
+    };
+
+    setPruebas([...pruebas, pruebaAgregada]);
+    setNuevaPrueba({ codigoCUPS: "", nombre: "" });
+    setBuscarPrueba("");
+    setMostrarFormPrueba(false);
+    toast.success("Prueba agregada correctamente");
+  };
+
+  const eliminarPrueba = (id: string | undefined) => {
+    setPruebas(pruebas.filter(p => p.id !== id));
+    toast.success("Prueba eliminada");
+  };
+
+  const seleccionarCUPS = (cups: typeof CUPS_DATABASE[0]) => {
+    setNuevaPrueba({ codigoCUPS: cups.codigo, nombre: cups.nombre });
+    setBuscarPrueba(cups.nombre);
+    setMostrarSugerencias(false);
+  };
+
+  // ============================================================================
+  // INTERCONSULTAS Y REMISIONES
+  // ============================================================================
 
   const agregarInterconsulta = () => {
     if (!nuevaInterconsulta.especialista || !nuevaInterconsulta.motivo) {
@@ -103,7 +254,10 @@ export function PlanTratamiento({
     updateData({ remisionesEspecialistas: todas });
   };
 
-  // DESCARGAR PDF - IGUAL A VISTAHIST
+  // ============================================================================
+  // DESCARGAR, EMAIL, WHATSAPP
+  // ============================================================================
+
   const handleDescargarPDF = async () => {
     try {
       setIsDownloading(true);
@@ -132,7 +286,6 @@ export function PlanTratamiento({
     }
   };
 
-  // ENVIAR EMAIL - IGUAL A VISTAHIST
   const abrirMailtoConEnlace = (email: string, dep: any) => {
     const subject = encodeURIComponent(`Historia Clínica - ${dep.nombres} ${dep.apellidos}`);
     const pdfUrl = `${API_BASE_URL}/documentos/${historiaId}/historia-clinica-pdf`;
@@ -170,7 +323,6 @@ export function PlanTratamiento({
       );
       
       const responseData = await response.json();
-      
       toast.dismiss();
       
       if (response.ok && responseData.success) {
@@ -192,7 +344,6 @@ export function PlanTratamiento({
     }
   };
 
-  // ENVIAR WHATSAPP - IGUAL A VISTAHIST
   const handleEnviarWhatsApp = async () => {
     let telefono = deportista?.telefono || deportista?.celular;
     
@@ -249,6 +400,10 @@ export function PlanTratamiento({
     }
   };
 
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   return (
     <div className="space-y-8">
       {/* INDICACIONES MÉDICAS */}
@@ -263,6 +418,237 @@ export function PlanTratamiento({
           placeholder="Medicamentos, terapias, restricciones, cuidados especiales..."
           className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none font-medium"
         />
+      </div>
+
+      {/* RECETAS MÉDICAS */}
+      <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 p-6 rounded-lg space-y-4">
+        <button
+          type="button"
+          onClick={() => setSeccionesAbiertas({ ...seccionesAbiertas, recetas: !seccionesAbiertas.recetas })}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="font-semibold text-green-900 text-lg">Recetas Médicas (Opcional)</h3>
+          {seccionesAbiertas.recetas ? (
+            <ChevronUp className="w-5 h-5 text-green-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-green-600" />
+          )}
+        </button>
+
+        {seccionesAbiertas.recetas && (
+          <div className="space-y-4">
+            {!mostrarFormReceta ? (
+              <button
+                type="button"
+                onClick={() => setMostrarFormReceta(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+              >
+                <Plus className="w-5 h-5" />
+                Agregar Receta
+              </button>
+            ) : (
+              <div className="bg-white p-4 rounded-lg border-2 border-green-300 space-y-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre del Medicamento <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={nuevaReceta.nombrePrueba}
+                    onChange={(e) => setNuevaReceta({ ...nuevaReceta, nombrePrueba: e.target.value })}
+                    placeholder="Nombre del medicamento"
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Código/Dosis <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={nuevaReceta.codigoCUPS}
+                    onChange={(e) => setNuevaReceta({ ...nuevaReceta, codigoCUPS: e.target.value })}
+                    placeholder="Ej: 500mg cada 8 horas"
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Indicaciones/Observaciones</label>
+                  <textarea
+                    value={nuevaReceta.resultado}
+                    onChange={(e) => setNuevaReceta({ ...nuevaReceta, resultado: e.target.value })}
+                    placeholder="Ej: Tomar con alimentos, no mezclar con alcohol, duración 10 días..."
+                    rows={2}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={agregarReceta}
+                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                  >
+                    Guardar Receta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarFormReceta(false);
+                      setNuevaReceta({ categoria: "Medicamento", nombrePrueba: "", codigoCUPS: "", resultado: "", archivosAdjuntos: [] });
+                    }}
+                    className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors font-semibold"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {recetas.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4 border-t-2 border-green-300">
+                <p className="text-sm font-semibold text-green-800">Recetas agregadas:</p>
+                {recetas.map((receta, idx) => (
+                  <div key={idx} className="bg-white border-2 border-green-200 rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-800">{receta.nombrePrueba}</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          <span className="font-semibold">Dosis:</span> {receta.codigoCUPS}
+                        </p>
+                        {receta.resultado && (
+                          <p className="text-xs text-gray-600 mt-1 italic">{receta.resultado}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => eliminarReceta(idx)}
+                        className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* PRUEBAS SOLICITADAS */}
+      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 p-6 rounded-lg space-y-4">
+        <button
+          type="button"
+          onClick={() => setSeccionesAbiertas({ ...seccionesAbiertas, pruebas: !seccionesAbiertas.pruebas })}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="font-semibold text-blue-900 text-lg">Pruebas Solicitadas (Opcional)</h3>
+          {seccionesAbiertas.pruebas ? (
+            <ChevronUp className="w-5 h-5 text-blue-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-blue-600" />
+          )}
+        </button>
+
+        {seccionesAbiertas.pruebas && (
+          <div className="space-y-4">
+            {!mostrarFormPrueba ? (
+              <button
+                type="button"
+                onClick={() => setMostrarFormPrueba(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                <Plus className="w-5 h-5" />
+                Agregar Prueba
+              </button>
+            ) : (
+              <div className="bg-white p-4 rounded-lg border-2 border-blue-300 space-y-3">
+                <div className="relative">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Buscar Prueba por CUPS o Nombre</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={buscarPrueba}
+                      onChange={(e) => {
+                        setBuscarPrueba(e.target.value);
+                        setMostrarSugerencias(true);
+                      }}
+                      onFocus={() => setMostrarSugerencias(true)}
+                      placeholder="Ej: Hemograma, 80101..."
+                      className="w-full pl-10 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {mostrarSugerencias && cupsSugeridos.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border-2 border-blue-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      {cupsSugeridos.map((cups) => (
+                        <button
+                          key={cups.codigo}
+                          type="button"
+                          onClick={() => seleccionarCUPS(cups)}
+                          className="w-full text-left px-4 py-2 hover:bg-blue-100 border-b border-gray-200 last:border-b-0 transition-colors"
+                        >
+                          <p className="font-semibold text-gray-800">{cups.nombre}</p>
+                          <p className="text-xs text-gray-600">CUPS: {cups.codigo}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {nuevaPrueba.codigoCUPS && (
+                  <div className="bg-blue-100 p-3 rounded-lg border-2 border-blue-300">
+                    <p className="text-sm font-semibold text-blue-900">{nuevaPrueba.nombre}</p>
+                    <p className="text-xs text-blue-700">Código CUPS: {nuevaPrueba.codigoCUPS}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={agregarPrueba}
+                    disabled={!nuevaPrueba.codigoCUPS || !nuevaPrueba.nombre}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors font-semibold"
+                  >
+                    Agregar Prueba
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarFormPrueba(false);
+                      setNuevaPrueba({ codigoCUPS: "", nombre: "" });
+                      setBuscarPrueba("");
+                    }}
+                    className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors font-semibold"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {pruebas.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4 border-t-2 border-blue-300">
+                <p className="text-sm font-semibold text-blue-800">Pruebas agregadas:</p>
+                {pruebas.map((prueba) => (
+                  <div key={prueba.id} className="bg-white border-2 border-blue-200 rounded-lg p-3 flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800">{prueba.nombre}</p>
+                      <p className="text-xs text-gray-600">CUPS: {prueba.codigoCUPS}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => eliminarPrueba(prueba.id)}
+                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* RECOMENDACIONES */}
@@ -294,154 +680,180 @@ export function PlanTratamiento({
       </div>
 
       {/* INTERCONSULTAS */}
-      <div className="bg-gray-50 border-l-4 border-gray-400 p-6 rounded-lg space-y-4">
-        <h3 className="font-semibold text-gray-800">Interconsultas con Especialistas</h3>
+      <div className="bg-gray-50 border-2 border-gray-300 p-6 rounded-lg space-y-4">
+        <button
+          type="button"
+          onClick={() => setSeccionesAbiertas({ ...seccionesAbiertas, interconsultas: !seccionesAbiertas.interconsultas })}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="font-semibold text-gray-800 text-lg">Interconsultas (Opcional)</h3>
+          {seccionesAbiertas.interconsultas ? (
+            <ChevronUp className="w-5 h-5 text-gray-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-600" />
+          )}
+        </button>
         
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Especialista</label>
-            <select
-              value={nuevaInterconsulta.especialista}
-              onChange={(e) =>
-                setNuevaInterconsulta({ ...nuevaInterconsulta, especialista: e.target.value })
-              }
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
+        {seccionesAbiertas.interconsultas && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Especialista</label>
+              <select
+                value={nuevaInterconsulta.especialista}
+                onChange={(e) =>
+                  setNuevaInterconsulta({ ...nuevaInterconsulta, especialista: e.target.value })
+                }
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
+              >
+                <option value="">Seleccione un especialista...</option>
+                {especialistas.map((esp) => (
+                  <option key={esp} value={esp}>{esp}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Motivo</label>
+              <textarea
+                value={nuevaInterconsulta.motivo}
+                onChange={(e) =>
+                  setNuevaInterconsulta({ ...nuevaInterconsulta, motivo: e.target.value })
+                }
+                placeholder="Describa el motivo..."
+                rows={3}
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none font-medium"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={agregarInterconsulta}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
             >
-              <option value="">Seleccione un especialista...</option>
-              {especialistas.map((esp) => (
-                <option key={esp} value={esp}>{esp}</option>
-              ))}
-            </select>
-          </div>
+              Agregar Interconsulta
+            </button>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Motivo</label>
-            <textarea
-              value={nuevaInterconsulta.motivo}
-              onChange={(e) =>
-                setNuevaInterconsulta({ ...nuevaInterconsulta, motivo: e.target.value })
-              }
-              placeholder="Describa el motivo..."
-              rows={3}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none font-medium"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={agregarInterconsulta}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-          >
-            Agregar Interconsulta
-          </button>
-        </div>
-
-        {interconsultas.length > 0 && (
-          <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-300">
-            {interconsultas.map((inter, idx) => (
-              <div key={idx} className="bg-white border-2 border-gray-300 rounded-lg p-3 flex justify-between items-start">
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-800 text-sm">{inter.especialista}</p>
-                  <p className="text-xs text-gray-600 mt-1">{inter.motivo}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => eliminarInterconsulta(idx)}
-                  className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+            {interconsultas.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-300">
+                {interconsultas.map((inter, idx) => (
+                  <div key={idx} className="bg-white border-2 border-gray-300 rounded-lg p-3 flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800 text-sm">{inter.especialista}</p>
+                      <p className="text-xs text-gray-600 mt-1">{inter.motivo}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => eliminarInterconsulta(idx)}
+                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
 
       {/* REMISIONES */}
-      <div className="bg-gray-50 border-l-4 border-gray-400 p-6 rounded-lg space-y-4">
-        <h3 className="font-semibold text-gray-800">Remisiones a Especialistas (Urgentes)</h3>
+      <div className="bg-red-50 border-2 border-red-300 p-6 rounded-lg space-y-4">
+        <button
+          type="button"
+          onClick={() => setSeccionesAbiertas({ ...seccionesAbiertas, remisiones: !seccionesAbiertas.remisiones })}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="font-semibold text-red-900 text-lg">Remisiones Urgentes (Opcional)</h3>
+          {seccionesAbiertas.remisiones ? (
+            <ChevronUp className="w-5 h-5 text-red-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-red-600" />
+          )}
+        </button>
         
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Especialista</label>
-            <select
-              value={nuevaRemision.especialista}
-              onChange={(e) =>
-                setNuevaRemision({ ...nuevaRemision, especialista: e.target.value })
-              }
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
+        {seccionesAbiertas.remisiones && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Especialista</label>
+              <select
+                value={nuevaRemision.especialista}
+                onChange={(e) =>
+                  setNuevaRemision({ ...nuevaRemision, especialista: e.target.value })
+                }
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
+              >
+                <option value="">Seleccione un especialista...</option>
+                {especialistas.map((esp) => (
+                  <option key={esp} value={esp}>{esp}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Motivo</label>
+              <textarea
+                value={nuevaRemision.motivo}
+                onChange={(e) =>
+                  setNuevaRemision({ ...nuevaRemision, motivo: e.target.value })
+                }
+                placeholder="Describa el motivo..."
+                rows={3}
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Fecha</label>
+              <input
+                type="date"
+                value={nuevaRemision.fechaRemision}
+                onChange={(e) =>
+                  setNuevaRemision({ ...nuevaRemision, fechaRemision: e.target.value })
+                }
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={agregarRemision}
+              className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-semibold"
             >
-              <option value="">Seleccione un especialista...</option>
-              {especialistas.map((esp) => (
-                <option key={esp} value={esp}>{esp}</option>
-              ))}
-            </select>
-          </div>
+              Agregar Remisión
+            </button>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Motivo</label>
-            <textarea
-              value={nuevaRemision.motivo}
-              onChange={(e) =>
-                setNuevaRemision({ ...nuevaRemision, motivo: e.target.value })
-              }
-              placeholder="Describa el motivo..."
-              rows={3}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none font-medium"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Fecha</label>
-            <input
-              type="date"
-              value={nuevaRemision.fechaRemision}
-              onChange={(e) =>
-                setNuevaRemision({ ...nuevaRemision, fechaRemision: e.target.value })
-              }
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-medium"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={agregarRemision}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-          >
-            Agregar Remisión
-          </button>
-        </div>
-
-        {remisiones.length > 0 && (
-          <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-300">
-            {remisiones.map((rem, idx) => (
-              <div key={idx} className="bg-white border-2 border-red-300 rounded-lg p-3 flex justify-between items-start">
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-800 text-sm">{rem.especialista}</p>
-                  <p className="text-xs text-gray-600 mt-1">{rem.motivo}</p>
-                  <div className="flex gap-2 mt-2 text-xs">
-                    <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded font-semibold">
-                      {rem.prioridad}
-                    </span>
-                    <span className="text-gray-500">
-                      {new Date(rem.fechaRemision).toLocaleDateString("es-CO")}
-                    </span>
+            {remisiones.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4 border-t-2 border-red-300">
+                {remisiones.map((rem, idx) => (
+                  <div key={idx} className="bg-white border-2 border-red-300 rounded-lg p-3 flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800 text-sm">{rem.especialista}</p>
+                      <p className="text-xs text-gray-600 mt-1">{rem.motivo}</p>
+                      <div className="flex gap-2 mt-2 text-xs">
+                        <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded font-semibold">
+                          {rem.prioridad}
+                        </span>
+                        <span className="text-gray-500">
+                          {new Date(rem.fechaRemision).toLocaleDateString("es-CO")}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => eliminarRemision(idx)}
+                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => eliminarRemision(idx)}
-                  className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
 
-      {/* BOTONES DE DISTRIBUCIÓN - FINAL (EXACTOS DE VISTAHIST) */}
+      {/* BOTONES DE DISTRIBUCIÓN */}
       {historiaId && (
         <div className="flex flex-wrap gap-2 print:hidden">
           <button
@@ -458,7 +870,7 @@ export function PlanTratamiento({
             onClick={handleEnviarEmail}
             disabled={isSendingEmail}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-            title="Enviar por Email con PDF adjunto"
+            title="Enviar por Email"
           >
             <Mail className="w-4 h-4" />
             <span className="hidden sm:inline">{isSendingEmail ? 'Enviando...' : 'Email'}</span>
@@ -468,7 +880,7 @@ export function PlanTratamiento({
             onClick={handleEnviarWhatsApp}
             disabled={isSendingWhatsApp}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400"
-            title="Enviar por WhatsApp con enlace seguro"
+            title="Enviar por WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />
             <span className="hidden sm:inline">{isSendingWhatsApp ? 'Generando...' : 'WhatsApp'}</span>
@@ -487,3 +899,5 @@ export function PlanTratamiento({
     </div>
   );
 }
+
+export default PlanTratamiento;
