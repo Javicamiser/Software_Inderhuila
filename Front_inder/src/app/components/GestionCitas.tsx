@@ -373,9 +373,6 @@ export function GestionCitas() {
         {/* Lista de citas de la semana */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="mb-4 text-lg font-semibold text-gray-800">Citas de esta semana</h2>
-          
-          {console.log("🎨 Renderizando lista de citas. Total:", citas.length, "En semana:", citasSemanaActual.length)}
-          {console.log("📋 Primera cita en semana:", citasSemanaActual[0]?.estado_cita?.nombre)}
 
           {citasSemanaActual.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
