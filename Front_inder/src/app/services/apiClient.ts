@@ -1,12 +1,5 @@
 /**
  * API CLIENT ACTUALIZADO PARA INDERDB
- * INCLUYE: Catálogos, Deportistas, Historia Clínica, Vacunas, Citas, Archivos, Documentos
- * 
- * CAMBIOS PRINCIPALES:
- * 1. Nuevos servicios para catálogos (tipos_documento, sexos, estados)
- * 2. Servicios para vacunas con carga de archivos
- * 3. Servicios para historia clínica completa (7 pasos)
- * 4. Servicios de citas y archivos clínicos
  */
 
 import axios, { AxiosInstance } from 'axios';
@@ -15,8 +8,9 @@ import axios, { AxiosInstance } from 'axios';
 // CONFIGURACIÓN
 // ============================================================================
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '10000');
+// URL del backend con ngrok para acceso externo
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://aposporic-maple-nonfrenetically.ngrok-free.dev/api/v1';
+const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
 
 console.log(`🚀 API Client inicializado con URL: ${API_BASE_URL}`);
 
@@ -207,6 +201,7 @@ export const api: AxiosInstance = axios.create({
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',  // Evitar página de advertencia de ngrok
   },
 });
 
@@ -216,6 +211,8 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Agregar header para evitar advertencia de ngrok en cada request
+  config.headers['ngrok-skip-browser-warning'] = 'true';
   return config;
 });
 
@@ -274,6 +271,10 @@ export const catalogosService = {
 
   async getEstadosCita() {
     return this.getItems('estado_cita');
+  },
+
+  async getEstadosHistoriaClinica() {
+    return this.getItems('estado_historia_clinica');
   },
 
   async getAllCatalogos() {
@@ -388,6 +389,262 @@ export const deportistasService = {
 };
 
 // ============================================================================
+// FUNCIÓN DE TRANSFORMACIÓN DE DATOS PARA HISTORIA CLÍNICA
+// ============================================================================
+// CORRECCIONES APLICADAS:
+// 1. revision_sistemas → sistema_nombre + estado (antes: sistema + hallazgos). Envía TODOS los sistemas.
+// 2. pruebas_complementarias → NUEVO: transforma ayudasDiagnosticas del frontend.
+// 3. remisiones_especialistas → especialista (antes: especialidad).
+// 4. lesiones_deportivas, cirugias_previas, alergias, medicaciones → NUEVO.
+// 5. plan_tratamiento → Agrega indicaciones_medicas, recomendaciones_entrenamiento, plan_seguimiento.
+// ============================================================================
+
+function transformarDatosHistoriaClinica(dataFrontend: any): any {
+  const hoy = new Date().toISOString().split('T')[0];
+  
+  // Transformar antecedentes personales
+  const antecedentesPersonales = (dataFrontend.antecedentesPersonales || []).map((item: any) => ({
+    codigo_cie11: item.codigoCIE11 || item.codigo_cie11 || '',
+    nombre_enfermedad: item.nombreEnfermedad || item.nombre_enfermedad || '',
+    observaciones: item.observaciones || null,
+  }));
+
+  // Transformar antecedentes familiares
+  const antecedentesFamiliares = (dataFrontend.antecedentesFamiliares || []).map((item: any) => ({
+    tipo_familiar: item.familiar || item.tipo_familiar || '',
+    codigo_cie11: item.codigoCIE11 || item.codigo_cie11 || '',
+    nombre_enfermedad: item.nombreEnfermedad || item.nombre_enfermedad || '',
+  }));
+
+  // ✅ FIX #4a: Transformar lesiones deportivas (NUEVO - antes no se enviaba)
+  const lesionesDeportivas: any[] = [];
+  if (dataFrontend.lesionesDeportivas && dataFrontend.descripcionLesiones?.trim()) {
+    lesionesDeportivas.push({
+      descripcion: dataFrontend.descripcionLesiones,
+      fecha_ultima_lesion: dataFrontend.fechaUltimaLesion || null,
+      observaciones: null,
+    });
+  }
+
+  // ✅ FIX #4b: Transformar cirugías previas (NUEVO - antes no se enviaba)
+  const cirugiasPrevias: any[] = [];
+  if (dataFrontend.cirugiasPrevias && dataFrontend.detalleCirugias?.trim()) {
+    cirugiasPrevias.push({
+      tipo_cirugia: dataFrontend.detalleCirugias,
+      fecha_cirugia: null,
+      observaciones: null,
+    });
+  }
+
+  // ✅ FIX #4c: Transformar alergias (NUEVO - antes no se enviaba)
+  const alergias: any[] = [];
+  if (dataFrontend.tieneAlergias && dataFrontend.alergias?.length > 0) {
+    dataFrontend.alergias.forEach((alergia: any) => {
+      const subtiposTexto = (alergia.subtipos || []).join(', ');
+      const observaciones = [subtiposTexto, alergia.detalles].filter(Boolean).join(' - ');
+      alergias.push({
+        tipo_alergia: alergia.tipo || 'No especificada',
+        observaciones: observaciones || null,
+      });
+    });
+  }
+
+  // ✅ FIX #4d: Transformar medicaciones (NUEVO - antes no se enviaba)
+  const medicaciones: any[] = [];
+  if (dataFrontend.tomaMedicacion && dataFrontend.medicacionActual?.trim()) {
+    medicaciones.push({
+      nombre_medicacion: dataFrontend.medicacionActual,
+      dosis: null,
+      frecuencia: null,
+      observaciones: null,
+    });
+  }
+
+  // Transformar diagnósticos
+  const diagnosticos = (dataFrontend.diagnosticos || []).map((item: any) => ({
+    codigo_cie11: item.codigo || item.codigoCIE11 || item.codigo_cie11 || '',
+    nombre_diagnostico: item.nombre || item.nombreDiagnostico || item.nombre_diagnostico || '',
+    tipo_diagnostico: item.tipo || item.tipoDiagnostico || 'principal',
+    observaciones: item.observaciones || null,
+  }));
+
+  // Transformar signos vitales
+  let signosVitales = null;
+  if (dataFrontend.peso || dataFrontend.estatura || dataFrontend.frecuenciaCardiaca) {
+    const peso = parseFloat(dataFrontend.peso) || 0;
+    const estatura = parseFloat(dataFrontend.estatura) || 0;
+    const imc = estatura > 0 ? (peso / ((estatura / 100) ** 2)) : 0;
+    
+    signosVitales = {
+      presion_arterial: dataFrontend.presionArterial || dataFrontend.presion_arterial || '120/80',
+      frecuencia_cardiaca: parseInt(dataFrontend.frecuenciaCardiaca || dataFrontend.frecuencia_cardiaca) || 70,
+      frecuencia_respiratoria: parseInt(dataFrontend.frecuenciaRespiratoria || dataFrontend.frecuencia_respiratoria) || 16,
+      temperatura: parseFloat(dataFrontend.temperatura) || 36.5,
+      peso: peso,
+      altura: estatura,
+      imc: parseFloat(imc.toFixed(2)),
+      saturacion_oxigeno: parseInt(dataFrontend.saturacionOxigeno || dataFrontend.saturacion_oxigeno) || 98,
+    };
+  }
+
+  // ✅ FIX #3: Transformar remisiones a especialistas (corregido: especialista, no especialidad)
+  const remisionesEspecialistas = (dataFrontend.remisionesEspecialistas || []).map((item: any) => ({
+    especialista: item.especialista || item.especialidad || '',
+    motivo: item.motivo || item.razon_remision || '',
+    prioridad: item.prioridad || 'Normal',
+    fecha_remision: item.fechaRemision || item.fecha_remision || hoy,
+    institucion: item.institucion || null,
+    observaciones: item.observaciones || null,
+  }));
+
+  // ✅ FIX #5: Transformar plan de tratamiento (agrega campos separados)
+  let planTratamiento = null;
+  if (dataFrontend.indicacionesMedicas || dataFrontend.recomendacionesEntrenamiento || dataFrontend.planSeguimiento) {
+    planTratamiento = {
+      indicaciones_medicas: dataFrontend.indicacionesMedicas || null,
+      recomendaciones_entrenamiento: dataFrontend.recomendacionesEntrenamiento || null,
+      plan_seguimiento: dataFrontend.planSeguimiento || null,
+      recomendaciones: [
+        dataFrontend.indicacionesMedicas || '',
+        dataFrontend.recomendacionesEntrenamiento || '',
+      ].filter(Boolean).join('\n\n') || 'Sin recomendaciones',
+      medicamentos_prescritos: dataFrontend.medicacionActual || null,
+      procedimientos: null,
+      rehabilitacion: dataFrontend.recomendacionesEntrenamiento || null,
+      fecha_seguimiento: null,
+      observaciones: dataFrontend.planSeguimiento || null,
+    };
+  }
+
+  // Transformar motivo de consulta
+  let motivoConsultaEnfermedad = null;
+  if (dataFrontend.motivoConsulta || dataFrontend.enfermedadActual) {
+    motivoConsultaEnfermedad = {
+      motivo_consulta: dataFrontend.motivoConsulta || 'Consulta médica deportiva',
+      sintomas_principales: dataFrontend.enfermedadActual || null,
+      duracion_sintomas: null,
+      inicio_enfermedad: null,
+      evolucion: null,
+      factor_desencadenante: null,
+      medicamentos_previos: dataFrontend.medicacionActual || null,
+    };
+  }
+
+  // Transformar exploración física por sistemas
+  let exploracionFisicaSistemas = null;
+  if (dataFrontend.exploracionSistemas) {
+    const exp = dataFrontend.exploracionSistemas;
+    exploracionFisicaSistemas = {
+      sistema_cardiovascular: exp.cardiovascular?.observaciones || (exp.cardiovascular?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_respiratorio: exp.respiratorio?.observaciones || (exp.respiratorio?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_digestivo: exp.digestivo?.observaciones || (exp.digestivo?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_neurologico: exp.neurologico?.observaciones || (exp.neurologico?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_genitourinario: exp.genitourinario?.observaciones || (exp.genitourinario?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_musculoesqueletico: exp.musculoesqueletico?.observaciones || (exp.musculoesqueletico?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_integumentario: exp.pielFaneras?.observaciones || (exp.pielFaneras?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      sistema_endocrino: exp.endocrino?.observaciones || (exp.endocrino?.estado === 'anormal' ? 'Anormal' : 'Normal'),
+      cabeza_cuello: null,
+      extremidades: null,
+      observaciones_generales: dataFrontend.analisisObjetivoDiagnostico || null,
+    };
+  }
+
+  // ✅ FIX #1: Transformar revisión por sistemas (corregido: sistema_nombre + estado, envía TODOS)
+  const revisionSistemas: any[] = [];
+  if (dataFrontend.revisionSistemas) {
+    const rev = dataFrontend.revisionSistemas;
+    const sistemas = [
+      { key: 'cardiovascular', nombre: 'Cardiovascular' },
+      { key: 'respiratorio', nombre: 'Respiratorio' },
+      { key: 'digestivo', nombre: 'Digestivo' },
+      { key: 'neurologico', nombre: 'Neurológico' },
+      { key: 'musculoesqueletico', nombre: 'Musculoesquelético' },
+      { key: 'genitourinario', nombre: 'Genitourinario' },
+      { key: 'endocrino', nombre: 'Endocrino' },
+      { key: 'pielFaneras', nombre: 'Piel y Faneras' },
+    ];
+    
+    sistemas.forEach(({ key, nombre }) => {
+      if (rev[key] && rev[key].estado) {
+        revisionSistemas.push({
+          sistema_nombre: nombre,
+          estado: rev[key].estado,
+          observaciones: rev[key].observaciones || null,
+        });
+      }
+    });
+  }
+
+  // ✅ FIX #2: Transformar pruebas complementarias (NUEVO - antes no se enviaba)
+  const pruebasComplementarias: any[] = [];
+  if (dataFrontend.necesitaPruebas && dataFrontend.ayudasDiagnosticas?.length > 0) {
+    dataFrontend.ayudasDiagnosticas.forEach((prueba: any) => {
+      pruebasComplementarias.push({
+        tipo_prueba: prueba.nombrePrueba || prueba.categoria || 'No especificada',
+        resultado: prueba.resultado || null,
+        fecha_prueba: null,
+        interpretacion: null,
+        observaciones: prueba.codigoCUPS ? `CUPS: ${prueba.codigoCUPS}` : null,
+      });
+    });
+  }
+
+  // Construir objeto final para el backend
+  const datosBackend: any = {
+    deportista_id: dataFrontend.deportista_id,
+    fecha_apertura: hoy,
+    estado_id: dataFrontend.estado_id || '6203e531-aa6c-4490-a068-374c955bb197',
+  };
+
+  // Solo agregar campos si tienen datos
+  if (antecedentesPersonales.length > 0) {
+    datosBackend.antecedentes_personales = antecedentesPersonales;
+  }
+  if (antecedentesFamiliares.length > 0) {
+    datosBackend.antecedentes_familiares = antecedentesFamiliares;
+  }
+  if (lesionesDeportivas.length > 0) {
+    datosBackend.lesiones_deportivas = lesionesDeportivas;
+  }
+  if (cirugiasPrevias.length > 0) {
+    datosBackend.cirugias_previas = cirugiasPrevias;
+  }
+  if (alergias.length > 0) {
+    datosBackend.alergias = alergias;
+  }
+  if (medicaciones.length > 0) {
+    datosBackend.medicaciones = medicaciones;
+  }
+  if (diagnosticos.length > 0) {
+    datosBackend.diagnosticos = diagnosticos;
+  }
+  if (signosVitales) {
+    datosBackend.signos_vitales = signosVitales;
+  }
+  if (remisionesEspecialistas.length > 0) {
+    datosBackend.remisiones_especialistas = remisionesEspecialistas;
+  }
+  if (planTratamiento) {
+    datosBackend.plan_tratamiento = planTratamiento;
+  }
+  if (motivoConsultaEnfermedad) {
+    datosBackend.motivo_consulta_enfermedad = motivoConsultaEnfermedad;
+  }
+  if (exploracionFisicaSistemas) {
+    datosBackend.exploracion_fisica_sistemas = exploracionFisicaSistemas;
+  }
+  if (revisionSistemas.length > 0) {
+    datosBackend.revision_sistemas = revisionSistemas;
+  }
+  if (pruebasComplementarias.length > 0) {
+    datosBackend.pruebas_complementarias = pruebasComplementarias;
+  }
+
+  console.log('📤 Datos transformados para backend:', JSON.stringify(datosBackend, null, 2));
+  return datosBackend;
+}
+
+// ============================================================================
 // SERVICIOS: HISTORIAS CLÍNICAS
 // ============================================================================
 
@@ -435,9 +692,12 @@ export const historiaClinicaService = {
   },
 
   async crearCompleta(data: any) {
+    // Transformar datos del formato del frontend al formato del backend
+    const datosTransformados = transformarDatosHistoriaClinica(data);
+    
     const response = await api.post<any>(
       '/historias_clinicas/completa',
-      data
+      datosTransformados
     );
     return response.data;
   },
@@ -711,6 +971,20 @@ export const documentosService = {
       console.error('Error descargando PDF:', error);
       throw error;
     }
+  },
+
+  // Generar link seguro para compartir por WhatsApp
+  async generarLinkSeguro(historiaId: string) {
+    const response = await api.post(`/descarga-segura/generar/${historiaId}`);
+    return response.data;
+  },
+
+  // Verificar token de descarga
+  async verificarToken(token: string, numeroCedula: string) {
+    const response = await api.post(`/descarga-segura/verificar/${token}`, {
+      numero_cedula: numeroCedula
+    });
+    return response.data;
   },
 };
 

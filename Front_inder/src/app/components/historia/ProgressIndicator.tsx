@@ -3,19 +3,35 @@ import { Check } from "lucide-react";
 type ProgressIndicatorProps = {
   currentStep: number;
   totalSteps: number;
+  necesitaPruebas?: boolean;
 };
 
-const stepLabels = [
-  "Evaluación",
-  "Antecedentes Médicos",
-  "Revisión por Sistemas",
-  "Exploración Física",
-  "Pruebas Complementarias",
-  "Diagnóstico",
-  "Plan de Tratamiento",
-];
+export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = false }: ProgressIndicatorProps) {
+  const getStepLabels = () => {
+    if (necesitaPruebas) {
+      return [
+        "Evaluación",
+        "Antecedentes Médicos",
+        "Revisión por Sistemas",
+        "Exploración Física",
+        "Pruebas Complementarias",
+        "Diagnóstico",
+        "Plan de Tratamiento",
+      ];
+    } else {
+      return [
+        "Evaluación",
+        "Antecedentes Médicos",
+        "Revisión por Sistemas",
+        "Exploración Física",
+        "Diagnóstico",
+        "Plan de Tratamiento",
+      ];
+    }
+  };
 
-export function ProgressIndicator({ currentStep, totalSteps }: ProgressIndicatorProps) {
+  const stepLabels = getStepLabels();
+
   return (
     <div className="mb-8">
       {/* Indicador textual */}

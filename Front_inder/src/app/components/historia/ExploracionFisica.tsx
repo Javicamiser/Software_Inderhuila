@@ -903,25 +903,6 @@ export function ExploracionFisica({ data, updateData, onNext, onPrevious, onCanc
           eliminarPlantillaPersonalizada={eliminarPlantillaPersonalizada}
         />
       </div>
-
-      {/* Botones de navegación */}
-      <div className="flex justify-between items-center pt-6 border-t border-gray-200">
-        <button
-          onClick={onPrevious}
-          className="flex items-center gap-2 px-6 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Anterior
-        </button>
-
-        <button
-          onClick={handleNext}
-          className="flex items-center gap-2 px-6 py-2 bg-[#1F4788] text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Siguiente
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
     </div>
   );
 }

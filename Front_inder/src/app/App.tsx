@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { CatalogosProvider } from "./contexts/CatalogosContext";
-import Navbar from "./components/Navbar";
+import MedicalLayout from "./MedicalLayout";
 import { Inicio } from "./components/Inicio";
 import { RegistroDeportista } from "./components/RegistroDeportista";
 import { HistoriaClinica } from "./components/HistoriaClinica";
@@ -15,16 +15,35 @@ import { VistaHistoriaClinica } from "./components/VistaHistoriaClinica";
 import { DetalleDeportista } from "./components/DetalleDeportista";
 import { Reportes } from "./components/Reportes";
 import { ArchivosGestion } from "./components/ArchivosGestion";
+import { DescargarHistoria } from "./components/DescargarHistoria";
 import { deportistasService, Deportista } from "./services/apiClient";
 
 export default function App() {
   const [currentView, setCurrentView] = useState("inicio");
   const [selectedDeportista, setSelectedDeportista] = useState<Deportista | null>(null);
   const [selectedDeportistaId, setSelectedDeportistaId] = useState<string | null>(null);
+  const [downloadToken, setDownloadToken] = useState<string | null>(null);
+
+  // Detectar si la URL es de descarga segura
+  useEffect(() => {
+    const path = window.location.pathname;
+    const match = path.match(/^\/descargar\/([a-zA-Z0-9-]+)$/);
+    if (match) {
+      setDownloadToken(match[1]);
+      setCurrentView("descargar");
+    }
+  }, []);
+
+  // ========================================
+  // AUTO-SCROLL AL CAMBIAR DE VISTA
+  // ========================================
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentView]);
 
   const handleSelectDeportista = (deportista: Deportista) => {
     setSelectedDeportista(deportista);
-    setSelectedDeportistaId(deportista.id); // Agregar esta línea
+    setSelectedDeportistaId(deportista.id);
     setCurrentView("historia-form");
   };
 
@@ -35,8 +54,6 @@ export default function App() {
 
   const handleRegistroSubmit = async (data: any) => {
     try {
-      // El deportista ya fue creado en el paso 1 de RegistroDeportista
-      // Solo necesitamos navegar a la siguiente vista
       toast.success("Deportista registrado correctamente");
       setCurrentView("historia");
     } catch (error) {
@@ -46,7 +63,6 @@ export default function App() {
   };
 
   const handleRegistroCancel = () => {
-    // Volver a la vista de listado de deportistas
     setCurrentView("deportistas");
   };
 
@@ -60,6 +76,10 @@ export default function App() {
         return (
           <SelectDeportista
             onSelect={handleSelectDeportista}
+            onViewHistoria={(deportista, historiaId) => {
+              setSelectedDeportista(deportista);
+              setCurrentView(`historia-vista-${historiaId}`);
+            }}
           />
         );
       case "historia-form":
@@ -67,10 +87,15 @@ export default function App() {
           <HistoriaClinica
             deportista={selectedDeportista}
             onBack={handleBackToSelect}
+            onNavigate={setCurrentView}
           />
         ) : (
           <SelectDeportista
             onSelect={handleSelectDeportista}
+            onViewHistoria={(deportista, historiaId) => {
+              setSelectedDeportista(deportista);
+              setCurrentView(`historia-vista-${historiaId}`);
+            }}
           />
         );
       case "deportistas":
@@ -82,7 +107,8 @@ export default function App() {
           <DetalleDeportista deportistaId={selectedDeportistaId} />
         ) : (
           <ListadoDeportistas />
-        );      case "consultas":
+        );
+      case "consultas":
         return <GestionCitas />;
       case "reportes":
         return <Reportes />;
@@ -94,7 +120,10 @@ export default function App() {
             <h1 className="text-2xl font-bold">Configuración</h1>
             <p className="text-gray-600">Configura los parámetros del sistema y gestiona usuarios.</p>
           </div>
-        );      default:
+        );
+      case "descargar":
+        return downloadToken ? <DescargarHistoria token={downloadToken} /> : <Inicio onNavigate={setCurrentView} />;
+      default:
         // Manejo de vistas dinámicas como historia-vista-{id}
         if (currentView.startsWith("historia-vista-")) {
           const historiaId = currentView.replace("historia-vista-", "");
@@ -104,12 +133,20 @@ export default function App() {
     }
   };
 
+  // Si es página de descarga, mostrar sin MedicalLayout
+  if (currentView === "descargar" && downloadToken) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <DescargarHistoria token={downloadToken} />
+      </div>
+    );
+  }
+
   return (
     <CatalogosProvider>
-      <div className="min-h-screen bg-slate-50">
-        <Navbar onNavigate={setCurrentView} currentView={currentView} />
+      <MedicalLayout currentView={currentView} onNavigate={setCurrentView}>
         {renderView()}
-      </div>
+      </MedicalLayout>
     </CatalogosProvider>
   );
 }

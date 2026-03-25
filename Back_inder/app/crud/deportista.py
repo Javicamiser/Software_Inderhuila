@@ -5,7 +5,7 @@ from app.models.deportista import Deportista
 def crear_deportista(db: Session, data):
     """Crear nuevo deportista con validaciones previas"""
     
-    # ✅ VALIDAR QUE NO EXISTA PRIMERO
+    # Validar que no exista primero
     deportista_existente = db.query(Deportista).filter(
         Deportista.numero_documento == data.numero_documento
     ).first()
@@ -37,13 +37,120 @@ def obtener_deportista(db, deportista_id):
     return db.query(Deportista).filter(Deportista.id == deportista_id).first()
 
 def eliminar_deportista(db: Session, deportista_id: str):
-    """Eliminar un deportista por ID"""
+    """
+    Eliminar un deportista por ID.
+    Elimina primero todos los registros dependientes para evitar errores de FK.
+    """
     deportista = db.query(Deportista).filter(Deportista.id == deportista_id).first()
     if not deportista:
         return False
-    db.delete(deportista)
-    db.commit()
-    return True
+    
+    try:
+        # =====================================================================
+        # Eliminar registros dependientes en orden correcto
+        # =====================================================================
+        
+        # 1. Obtener IDs de historias clinicas del deportista
+        from app.models.historia import HistoriaClinica
+        historias = db.query(HistoriaClinica).filter(
+            HistoriaClinica.deportista_id == deportista_id
+        ).all()
+        
+        historia_ids = [str(h.id) for h in historias]
+        
+        if historia_ids:
+            # 2. Eliminar registros de tablas normalizadas vinculadas a historias
+            from app.models.antecedentes import (
+                AntecedentesPersonales, AntecedentesFamiliares, LesioneDeportivas,
+                CirugiasPrivas, Alergias, Medicaciones, VacunasAdministradas,
+                RevisionSistemas, SignosVitales, PruebasComplementarias,
+                Diagnosticos, PlanTratamiento, RemisionesEspecialistas,
+                MotivoConsultaEnfermedadActual, ExploracionFisicaSistemas
+            )
+            
+            tablas_historia = [
+                AntecedentesPersonales, AntecedentesFamiliares, LesioneDeportivas,
+                CirugiasPrivas, Alergias, Medicaciones, VacunasAdministradas,
+                RevisionSistemas, SignosVitales, PruebasComplementarias,
+                Diagnosticos, PlanTratamiento, RemisionesEspecialistas,
+                MotivoConsultaEnfermedadActual, ExploracionFisicaSistemas
+            ]
+            
+            for tabla in tablas_historia:
+                db.query(tabla).filter(
+                    tabla.historia_clinica_id.in_(historia_ids)
+                ).delete(synchronize_session=False)
+            
+            # 3. Eliminar archivos clinicos si existen
+            try:
+                from app.models.archivo import ArchivoClinico
+                db.query(ArchivoClinico).filter(
+                    ArchivoClinico.historia_clinica_id.in_(historia_ids)
+                ).delete(synchronize_session=False)
+            except Exception:
+                pass  # Tabla puede no existir
+            
+            # 4. Eliminar historias JSON si existen
+            try:
+                from app.models.historia import HistoriaClinicaJSON
+                db.query(HistoriaClinicaJSON).filter(
+                    HistoriaClinicaJSON.historia_clinica_id.in_(historia_ids)
+                ).delete(synchronize_session=False)
+            except Exception:
+                pass  # Tabla puede no existir
+            
+            # 5. Eliminar tokens de descarga si existen
+            try:
+                from app.models.token_descarga import TokenDescarga
+                db.query(TokenDescarga).filter(
+                    TokenDescarga.historia_id.in_(historia_ids)
+                ).delete(synchronize_session=False)
+            except Exception:
+                pass  # Tabla puede no existir
+            
+            # 6. Eliminar respuestas de grupo si existen
+            try:
+                from app.models.formulario import RespuestaGrupo
+                db.query(RespuestaGrupo).filter(
+                    RespuestaGrupo.historia_clinica_id.in_(historia_ids)
+                ).delete(synchronize_session=False)
+            except Exception:
+                pass  # Tabla puede no existir
+            
+            # 7. Eliminar historias clinicas
+            db.query(HistoriaClinica).filter(
+                HistoriaClinica.deportista_id == deportista_id
+            ).delete(synchronize_session=False)
+        
+        # 8. Eliminar citas del deportista
+        try:
+            from app.models.cita import Cita
+            db.query(Cita).filter(
+                Cita.deportista_id == deportista_id
+            ).delete(synchronize_session=False)
+        except Exception:
+            pass  # Tabla puede no existir
+        
+        # 9. Eliminar vacunas del deportista
+        try:
+            from app.models.antecedentes import VacunasDeportista
+            db.query(VacunasDeportista).filter(
+                VacunasDeportista.deportista_id == deportista_id
+            ).delete(synchronize_session=False)
+        except Exception:
+            pass  # Tabla puede no existir
+        
+        # 10. Finalmente eliminar el deportista
+        db.delete(deportista)
+        db.commit()
+        return True
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error al eliminar deportista {deportista_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 def actualizar_deportista(db: Session, deportista_id: str, data):
     """Actualizar un deportista existente"""

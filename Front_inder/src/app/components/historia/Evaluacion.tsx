@@ -57,26 +57,6 @@ export function Evaluacion({ data, updateData, onNext, onCancel }: Props) {
           Incluya: tiempo de evolución, intensidad de síntomas, relación con la actividad deportiva, etc.
         </p>
       </div>
-
-      {/* Botones de navegación */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={handleNext}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Continuar
-          <ChevronRight className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex items-center justify-center gap-2 bg-gray-300 text-gray-700 py-3 px-6 rounded-md hover:bg-gray-400 transition-colors"
-        >
-          <X className="w-5 h-5" />
-          Cancelar
-        </button>
-      </div>
     </div>
   );
 }

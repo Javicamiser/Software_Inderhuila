@@ -1,0 +1,279 @@
+/* ============================================
+   MEDICAL SIDEBAR - INDERHUILA
+   ============================================ */
+
+.medical-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 260px;
+  background: linear-gradient(180deg, #1a3a5c 0%, #0f2744 100%);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease, transform 0.3s ease;
+  z-index: 50;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+}
+
+.medical-sidebar.open {
+  width: 260px;
+  transform: translateX(0);
+}
+
+.medical-sidebar.closed {
+  width: 72px;
+}
+
+.medical-sidebar.closed .sidebar-title,
+.medical-sidebar.closed .nav-item span,
+.medical-sidebar.closed .user-info,
+.medical-sidebar.closed .logout-btn span {
+  display: none;
+}
+
+.medical-sidebar.closed .sidebar-header {
+  justify-content: center;
+  padding: 16px 8px;
+}
+
+.medical-sidebar.closed .sidebar-logo img {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+.medical-sidebar.closed .nav-item {
+  justify-content: center;
+  padding: 12px;
+}
+
+.medical-sidebar.closed .sidebar-footer {
+  justify-content: center;
+  padding: 12px 8px;
+}
+
+.medical-sidebar.closed .logout-btn {
+  justify-content: center;
+  padding: 10px;
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-logo {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-logo img {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px;
+}
+
+.sidebar-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-title .org {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.sidebar-title .name {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
+}
+.sidebar-footer {
+  padding: 20px 16px;
+  border-top: 1px solid #e8ecef;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, #1d6fb5 0%, #1a5a96 100%);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(29, 111, 181, 0.3);
+}
+
+.nav-item.active svg {
+  color: #5eead4;
+}
+
+.nav-item svg {
+  flex-shrink: 0;
+}
+
+.nav-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   FOOTER / USER
+   ============================================ */
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-info strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.user-info span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ============================================
+   LOGOUT BUTTON
+   ============================================ */
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 8px 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: calc(100% - 24px);
+}
+
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+
+.medical-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.medical-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.medical-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .medical-sidebar {
+    transform: translateX(-100%);
+    width: 260px !important;
+  }
+
+  .medical-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .medical-sidebar.closed {
+    transform: translateX(-100%);
+    width: 260px !important;
+  }
+}

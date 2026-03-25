@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Navbar from '../components/Navbar';
+import MedicalLayout from './MedicalLayout';
+import './styles/index.css';
 
 export default function DashboardLayout({
   children,
@@ -18,17 +19,16 @@ export default function DashboardLayout({
       ? localStorage.getItem('auth_token')
       : null;
     
-    if (!token) {
+    if (!token && typeof window !== 'undefined') {
       router.push('/login');
     }
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar onNavigate={setCurrentView} currentView={currentView} />
+    <MedicalLayout currentView={currentView} onNavigate={setCurrentView}>
       <main className="min-h-screen">
         {children}
       </main>
-    </div>
+    </MedicalLayout>
   );
 }
