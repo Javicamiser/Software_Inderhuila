@@ -1,228 +1,36 @@
-/**
- * API CLIENT ACTUALIZADO PARA INDERDB
- */
+// ============================================================
+// API CLIENT — único punto de entrada al backend
+// Todos los servicios viven aquí. Ningún componente hace
+// fetch/axios directo ni importa desde otro archivo de servicios.
+// ============================================================
+import axios, { type AxiosInstance } from 'axios';
+import type {
+  PaginatedResponse, CatalogoItem, Deportista, DeportistaCreate,
+  Vacuna, VacunaCreate, HistoriaClinica, Cita, ConfiguracionInstitucion,
+} from '../../types';
 
-import axios, { AxiosInstance } from 'axios';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const API_TIMEOUT  = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);
 
-// ============================================================================
-// CONFIGURACIÓN
-// ============================================================================
-
-// URL del backend con ngrok para acceso externo
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://aposporic-maple-nonfrenetically.ngrok-free.dev/api/v1';
-const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
-
-console.log(`🚀 API Client inicializado con URL: ${API_BASE_URL}`);
-
-// ============================================================================
-// TIPOS DE RESPUESTA
-// ============================================================================
-
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
-// ============================================================================
-// TIPOS PRINCIPALES
-// ============================================================================
-
-export interface Catalogo {
-  id: string;
-  nombre: string;
-  descripcion?: string;
-}
-
-export interface CatalogoItem {
-  id: string;
-  catalogo_id: string;
-  codigo?: string;
-  nombre: string;
-  activo: boolean;
-}
-
-export interface Deportista {
-  id: string;
-  tipo_documento_id: string;
-  numero_documento: string;
-  nombres: string;
-  apellidos: string;
-  fecha_nacimiento?: string;
-  edad?: number;
-  sexo_id?: string;
-  email?: string;
-  telefono?: string;
-  direccion?: string;
-  tipo_deporte?: string;
-  deporte_id?: string;
-  categoria?: string;
-  estado_id: string;
-  foto?: string | null;
-  created_at?: string;
-  updated_at?: string;
-  tipoDocumento?: string;
-  numeroDocumento?: string;
-  tipoDeporte?: string;
-}
-
-export type DeportistaCreate = {
-  tipo_documento_id: string;
-  numero_documento: string;
-  nombres: string;
-  apellidos: string;
-  fecha_nacimiento: string;
-  sexo_id: string;
-  telefono?: string | null;
-  email?: string | null;
-  direccion?: string | null;
-  tipo_deporte?: string | null;
-  estado_id: string;
-};
-
-export interface Vacuna {
-  id: string;
-  deportista_id: string;
-  nombre_vacuna: string;
-  fecha_administracion?: string;
-  nombre_archivo?: string;
-  tipo_archivo?: string;
-  ruta_archivo?: string;
-  observaciones?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface VacunaCreate {
-  nombre_vacuna: string;
-  fecha_administracion?: string;
-  observaciones?: string;
-}
-
-export interface Formulario {
-  id?: string;
-  nombre: string;
-  modulo: string;
-  activo: boolean;
-  campos?: FormularioCampo[];
-}
-
-export interface FormularioCampo {
-  id?: string;
-  formulario_id: string;
-  etiqueta: string;
-  tipo_campo: string;
-  requerido: boolean;
-  orden?: number;
-  catalogo_id?: string;
-  catalogo?: Catalogo;
-}
-
-export interface HistoriaClinica {
-  id?: string;
-  deportista_id: string;
-  fecha_apertura: string;
-  estado_id: string;
-  created_at?: string;
-  deportista?: Deportista;
-  estado?: CatalogoItem;
-  grupos?: RespuestaGrupo[];
-  respuestas?: FormularioRespuesta[];
-  archivos?: ArchivoCinico[];
-}
-
-export interface Cita {
-  id?: string;
-  deportista_id: string;
-  fecha: string;
-  hora: string;
-  tipo_cita_id: string;
-  estado_cita_id: string;
-  observaciones?: string;
-  created_at?: string;
-  deportista?: Deportista;
-  tipo_cita?: CatalogoItem;
-  estado_cita?: CatalogoItem;
-}
-
-export interface RespuestaGrupo {
-  id?: string;
-  historia_clinica_id: string;
-  formulario_id: string;
-  created_at?: string;
-  formulario?: Formulario;
-  respuestas?: FormularioRespuesta[];
-}
-
-export interface FormularioRespuesta {
-  id?: string;
-  formulario_id: string;
-  historia_clinica_id: string;
-  campo_id: string;
-  valor?: string;
-  created_at?: string;
-  grupo_id?: string;
-  campo?: FormularioCampo;
-}
-
-export interface ArchivoCinico {
-  id?: string;
-  historia_clinica_id: string;
-  formulario_id?: string;
-  grupo_id?: string;
-  nombre_archivo?: string;
-  ruta_archivo: string;
-  tipo_archivo?: string;
-  created_at?: string;
-}
-
-export interface PlantillaClinica {
-  id?: string;
-  sistema: string;
-  contenido: string;
-  activo: boolean;
-}
-
-// ============================================================================
-// AXIOS INSTANCE
-// ============================================================================
-
+// ── Instancia Axios ──────────────────────────────────────────
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': 'true',  // Evitar página de advertencia de ngrok
+    'ngrok-skip-browser-warning': 'true',
   },
 });
 
-// Interceptors
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  // Agregar header para evitar advertencia de ngrok en cada request
-  config.headers['ngrok-skip-browser-warning'] = 'true';
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error('❌ Error:', error.response?.status, error.response?.data?.error);
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
@@ -231,791 +39,262 @@ api.interceptors.response.use(
   }
 );
 
-// ============================================================================
-// SERVICIOS: CATÁLOGOS
-// ============================================================================
-
+// ── Catálogos ────────────────────────────────────────────────
 export const catalogosService = {
-  async getAll() {
-    const response = await api.get<Catalogo[]>('/catalogos');
-    return response.data;
+  async getItems(nombre: string) {
+    const { data } = await api.get<CatalogoItem[]>(`/catalogos/${nombre}/items`);
+    return data;
   },
-
-  async getCatalogo(nombre: string) {
-    const response = await api.get<Catalogo>(`/catalogos/${nombre}`);
-    return response.data;
-  },
-
-  async getItems(nombreCatalogo: string) {
-    const response = await api.get<CatalogoItem[]>(
-      `/catalogos/${nombreCatalogo}/items`
-    );
-    return response.data;
-  },
-
-  async getTiposDocumento() {
-    return this.getItems('tipo_documento');
-  },
-
-  async getSexos() {
-    return this.getItems('sexo');
-  },
-
-  async getEstadosDeportista() {
-    return this.getItems('estado_deportista');
-  },
-
-  async getTiposCita() {
-    return this.getItems('tipo_cita');
-  },
-
-  async getEstadosCita() {
-    return this.getItems('estado_cita');
-  },
-
-  async getEstadosHistoriaClinica() {
-    return this.getItems('estado_historia_clinica');
-  },
-
   async getAllCatalogos() {
-    return Promise.all([
-      this.getTiposDocumento(),
-      this.getSexos(),
-      this.getEstadosDeportista(),
-      this.getTiposCita(),
-      this.getEstadosCita(),
-    ]).then(([tiposDoc, sexos, estados, tiposCita, estadosCita]) => ({
-      tiposDocumento: tiposDoc,
-      sexos,
-      estados,
-      tiposCita,
-      estadosCita,
-    }));
+    const [tiposDocumento, sexos, estados, tiposCita, estadosCita] = await Promise.all([
+      this.getItems('tipo_documento'),
+      this.getItems('sexo'),
+      this.getItems('estado_deportista'),
+      this.getItems('tipo_cita'),
+      this.getItems('estado_cita'),
+    ]);
+    return { tiposDocumento, sexos, estados, tiposCita, estadosCita };
   },
 };
 
-// ============================================================================
-// SERVICIOS: DEPORTISTAS
-// ============================================================================
-
+// ── Deportistas ──────────────────────────────────────────────
 export const deportistasService = {
-  async getAll(page: number = 1, page_size: number = 10) {
-    const response = await api.get<PaginatedResponse<Deportista>>(
-      '/deportistas',
-      {
-        params: { page, page_size },
-      }
-    );
-    return response.data;
+  async getAll(page = 1, page_size = 10) {
+    const { data } = await api.get<PaginatedResponse<Deportista>>('/deportistas', { params: { page, page_size } });
+    return data;
   },
-
   async getById(id: string) {
-    const response = await api.get<Deportista>(`/deportistas/${id}`);
-    return response.data;
+    const { data } = await api.get<Deportista>(`/deportistas/${id}`);
+    return data;
   },
-
-  async search(query: string) {
-    const response = await api.get<Deportista[]>('/deportistas/search', {
-      params: { q: query },
-    });
-    return response.data;
+  async search(q: string) {
+    const { data } = await api.get<Deportista[]>('/deportistas/search', { params: { q } });
+    return data;
   },
-
-  async create(data: DeportistaCreate) {
-    const response = await api.post<Deportista>('/deportistas', data);
-    return response.data;
+  async create(body: DeportistaCreate) {
+    const { data } = await api.post<Deportista>('/deportistas', body);
+    return data;
   },
-
-  async update(id: string, data: Partial<Deportista>) {
-    const response = await api.put<Deportista>(`/deportistas/${id}`, data);
-    return response.data;
+  async update(id: string, body: Partial<Deportista>) {
+    const { data } = await api.put<Deportista>(`/deportistas/${id}`, body);
+    return data;
   },
-
-  async delete(id: string) {
+  async remove(id: string) {
     await api.delete(`/deportistas/${id}`);
   },
+};
 
-  // ==================== VACUNAS ====================
-  async getVacunas(deportistaId: string) {
-    const response = await api.get<Vacuna[]>(`/deportistas/${deportistaId}/vacunas`);
-    return response.data;
+// ── Vacunas ──────────────────────────────────────────────────
+export const vacunasService = {
+  async getAll(deportistaId: string) {
+    const { data } = await api.get<Vacuna[]>(`/deportistas/${deportistaId}/vacunas`);
+    return data;
   },
-
-  async crearVacuna(deportistaId: string, data: VacunaCreate) {
-    const response = await api.post<Vacuna>(
-      `/deportistas/${deportistaId}/vacunas`,
-      data
-    );
-    return response.data;
+  async create(deportistaId: string, body: VacunaCreate) {
+    const { data } = await api.post<Vacuna>(`/deportistas/${deportistaId}/vacunas`, body);
+    return data;
   },
-
-  async cargarArchivo(deportistaId: string, vacunaId: string, archivo: File) {
-    const formData = new FormData();
-    formData.append('archivo', archivo);
-
-    const response = await api.post(
+  async remove(deportistaId: string, vacunaId: string) {
+    await api.delete(`/deportistas/${deportistaId}/vacunas/${vacunaId}`);
+  },
+  async subirArchivo(deportistaId: string, vacunaId: string, archivo: File) {
+    const form = new FormData();
+    form.append('archivo', archivo);
+    const { data } = await api.post(
       `/deportistas/${deportistaId}/vacunas/${vacunaId}/archivo`,
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
     );
-    return response.data;
+    return data;
   },
-
   async descargarArchivo(deportistaId: string, vacunaId: string) {
-    const response = await api.get(
-      `/deportistas/${deportistaId}/vacunas/${vacunaId}/archivo`,
-      {
-        responseType: 'blob',
-      }
-    );
-    return response.data;
-  },
-
-  async actualizarVacuna(deportistaId: string, vacunaId: string, data: Partial<VacunaCreate>) {
-    const response = await api.put(
-      `/deportistas/${deportistaId}/vacunas/${vacunaId}`,
-      data
-    );
-    return response.data;
-  },
-
-  async eliminarVacuna(deportistaId: string, vacunaId: string) {
-    await api.delete(
-      `/deportistas/${deportistaId}/vacunas/${vacunaId}`
-    );
+    const { data } = await api.get(`/deportistas/${deportistaId}/vacunas/${vacunaId}/archivo`, { responseType: 'blob' });
+    return data;
   },
 };
 
-// ============================================================================
-// FUNCIÓN DE TRANSFORMACIÓN DE DATOS PARA HISTORIA CLÍNICA
-// ============================================================================
-// CORRECCIONES APLICADAS:
-// 1. revision_sistemas → sistema_nombre + estado (antes: sistema + hallazgos). Envía TODOS los sistemas.
-// 2. pruebas_complementarias → NUEVO: transforma ayudasDiagnosticas del frontend.
-// 3. remisiones_especialistas → especialista (antes: especialidad).
-// 4. lesiones_deportivas, cirugias_previas, alergias, medicaciones → NUEVO.
-// 5. plan_tratamiento → Agrega indicaciones_medicas, recomendaciones_entrenamiento, plan_seguimiento.
-// ============================================================================
-
-function transformarDatosHistoriaClinica(dataFrontend: any): any {
-  const hoy = new Date().toISOString().split('T')[0];
-  
-  // Transformar antecedentes personales
-  const antecedentesPersonales = (dataFrontend.antecedentesPersonales || []).map((item: any) => ({
-    codigo_cie11: item.codigoCIE11 || item.codigo_cie11 || '',
-    nombre_enfermedad: item.nombreEnfermedad || item.nombre_enfermedad || '',
-    observaciones: item.observaciones || null,
-  }));
-
-  // Transformar antecedentes familiares
-  const antecedentesFamiliares = (dataFrontend.antecedentesFamiliares || []).map((item: any) => ({
-    tipo_familiar: item.familiar || item.tipo_familiar || '',
-    codigo_cie11: item.codigoCIE11 || item.codigo_cie11 || '',
-    nombre_enfermedad: item.nombreEnfermedad || item.nombre_enfermedad || '',
-  }));
-
-  // ✅ FIX #4a: Transformar lesiones deportivas (NUEVO - antes no se enviaba)
-  const lesionesDeportivas: any[] = [];
-  if (dataFrontend.lesionesDeportivas && dataFrontend.descripcionLesiones?.trim()) {
-    lesionesDeportivas.push({
-      descripcion: dataFrontend.descripcionLesiones,
-      fecha_ultima_lesion: dataFrontend.fechaUltimaLesion || null,
-      observaciones: null,
-    });
-  }
-
-  // ✅ FIX #4b: Transformar cirugías previas (NUEVO - antes no se enviaba)
-  const cirugiasPrevias: any[] = [];
-  if (dataFrontend.cirugiasPrevias && dataFrontend.detalleCirugias?.trim()) {
-    cirugiasPrevias.push({
-      tipo_cirugia: dataFrontend.detalleCirugias,
-      fecha_cirugia: null,
-      observaciones: null,
-    });
-  }
-
-  // ✅ FIX #4c: Transformar alergias (NUEVO - antes no se enviaba)
-  const alergias: any[] = [];
-  if (dataFrontend.tieneAlergias && dataFrontend.alergias?.length > 0) {
-    dataFrontend.alergias.forEach((alergia: any) => {
-      const subtiposTexto = (alergia.subtipos || []).join(', ');
-      const observaciones = [subtiposTexto, alergia.detalles].filter(Boolean).join(' - ');
-      alergias.push({
-        tipo_alergia: alergia.tipo || 'No especificada',
-        observaciones: observaciones || null,
-      });
-    });
-  }
-
-  // ✅ FIX #4d: Transformar medicaciones (NUEVO - antes no se enviaba)
-  const medicaciones: any[] = [];
-  if (dataFrontend.tomaMedicacion && dataFrontend.medicacionActual?.trim()) {
-    medicaciones.push({
-      nombre_medicacion: dataFrontend.medicacionActual,
-      dosis: null,
-      frecuencia: null,
-      observaciones: null,
-    });
-  }
-
-  // Transformar diagnósticos
-  const diagnosticos = (dataFrontend.diagnosticos || []).map((item: any) => ({
-    codigo_cie11: item.codigo || item.codigoCIE11 || item.codigo_cie11 || '',
-    nombre_diagnostico: item.nombre || item.nombreDiagnostico || item.nombre_diagnostico || '',
-    tipo_diagnostico: item.tipo || item.tipoDiagnostico || 'principal',
-    observaciones: item.observaciones || null,
-  }));
-
-  // Transformar signos vitales
-  let signosVitales = null;
-  if (dataFrontend.peso || dataFrontend.estatura || dataFrontend.frecuenciaCardiaca) {
-    const peso = parseFloat(dataFrontend.peso) || 0;
-    const estatura = parseFloat(dataFrontend.estatura) || 0;
-    const imc = estatura > 0 ? (peso / ((estatura / 100) ** 2)) : 0;
-    
-    signosVitales = {
-      presion_arterial: dataFrontend.presionArterial || dataFrontend.presion_arterial || '120/80',
-      frecuencia_cardiaca: parseInt(dataFrontend.frecuenciaCardiaca || dataFrontend.frecuencia_cardiaca) || 70,
-      frecuencia_respiratoria: parseInt(dataFrontend.frecuenciaRespiratoria || dataFrontend.frecuencia_respiratoria) || 16,
-      temperatura: parseFloat(dataFrontend.temperatura) || 36.5,
-      peso: peso,
-      altura: estatura,
-      imc: parseFloat(imc.toFixed(2)),
-      saturacion_oxigeno: parseInt(dataFrontend.saturacionOxigeno || dataFrontend.saturacion_oxigeno) || 98,
-    };
-  }
-
-  // ✅ FIX #3: Transformar remisiones a especialistas (corregido: especialista, no especialidad)
-  const remisionesEspecialistas = (dataFrontend.remisionesEspecialistas || []).map((item: any) => ({
-    especialista: item.especialista || item.especialidad || '',
-    motivo: item.motivo || item.razon_remision || '',
-    prioridad: item.prioridad || 'Normal',
-    fecha_remision: item.fechaRemision || item.fecha_remision || hoy,
-    institucion: item.institucion || null,
-    observaciones: item.observaciones || null,
-  }));
-
-  // ✅ FIX #5: Transformar plan de tratamiento (agrega campos separados)
-  let planTratamiento = null;
-  if (dataFrontend.indicacionesMedicas || dataFrontend.recomendacionesEntrenamiento || dataFrontend.planSeguimiento) {
-    planTratamiento = {
-      indicaciones_medicas: dataFrontend.indicacionesMedicas || null,
-      recomendaciones_entrenamiento: dataFrontend.recomendacionesEntrenamiento || null,
-      plan_seguimiento: dataFrontend.planSeguimiento || null,
-      recomendaciones: [
-        dataFrontend.indicacionesMedicas || '',
-        dataFrontend.recomendacionesEntrenamiento || '',
-      ].filter(Boolean).join('\n\n') || 'Sin recomendaciones',
-      medicamentos_prescritos: dataFrontend.medicacionActual || null,
-      procedimientos: null,
-      rehabilitacion: dataFrontend.recomendacionesEntrenamiento || null,
-      fecha_seguimiento: null,
-      observaciones: dataFrontend.planSeguimiento || null,
-    };
-  }
-
-  // Transformar motivo de consulta
-  let motivoConsultaEnfermedad = null;
-  if (dataFrontend.motivoConsulta || dataFrontend.enfermedadActual) {
-    motivoConsultaEnfermedad = {
-      motivo_consulta: dataFrontend.motivoConsulta || 'Consulta médica deportiva',
-      sintomas_principales: dataFrontend.enfermedadActual || null,
-      duracion_sintomas: null,
-      inicio_enfermedad: null,
-      evolucion: null,
-      factor_desencadenante: null,
-      medicamentos_previos: dataFrontend.medicacionActual || null,
-    };
-  }
-
-  // Transformar exploración física por sistemas
-  let exploracionFisicaSistemas = null;
-  if (dataFrontend.exploracionSistemas) {
-    const exp = dataFrontend.exploracionSistemas;
-    exploracionFisicaSistemas = {
-      sistema_cardiovascular: exp.cardiovascular?.observaciones || (exp.cardiovascular?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_respiratorio: exp.respiratorio?.observaciones || (exp.respiratorio?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_digestivo: exp.digestivo?.observaciones || (exp.digestivo?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_neurologico: exp.neurologico?.observaciones || (exp.neurologico?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_genitourinario: exp.genitourinario?.observaciones || (exp.genitourinario?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_musculoesqueletico: exp.musculoesqueletico?.observaciones || (exp.musculoesqueletico?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_integumentario: exp.pielFaneras?.observaciones || (exp.pielFaneras?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      sistema_endocrino: exp.endocrino?.observaciones || (exp.endocrino?.estado === 'anormal' ? 'Anormal' : 'Normal'),
-      cabeza_cuello: null,
-      extremidades: null,
-      observaciones_generales: dataFrontend.analisisObjetivoDiagnostico || null,
-    };
-  }
-
-  // ✅ FIX #1: Transformar revisión por sistemas (corregido: sistema_nombre + estado, envía TODOS)
-  const revisionSistemas: any[] = [];
-  if (dataFrontend.revisionSistemas) {
-    const rev = dataFrontend.revisionSistemas;
-    const sistemas = [
-      { key: 'cardiovascular', nombre: 'Cardiovascular' },
-      { key: 'respiratorio', nombre: 'Respiratorio' },
-      { key: 'digestivo', nombre: 'Digestivo' },
-      { key: 'neurologico', nombre: 'Neurológico' },
-      { key: 'musculoesqueletico', nombre: 'Musculoesquelético' },
-      { key: 'genitourinario', nombre: 'Genitourinario' },
-      { key: 'endocrino', nombre: 'Endocrino' },
-      { key: 'pielFaneras', nombre: 'Piel y Faneras' },
-    ];
-    
-    sistemas.forEach(({ key, nombre }) => {
-      if (rev[key] && rev[key].estado) {
-        revisionSistemas.push({
-          sistema_nombre: nombre,
-          estado: rev[key].estado,
-          observaciones: rev[key].observaciones || null,
-        });
-      }
-    });
-  }
-
-  // ✅ FIX #2: Transformar pruebas complementarias (NUEVO - antes no se enviaba)
-  const pruebasComplementarias: any[] = [];
-  if (dataFrontend.necesitaPruebas && dataFrontend.ayudasDiagnosticas?.length > 0) {
-    dataFrontend.ayudasDiagnosticas.forEach((prueba: any) => {
-      pruebasComplementarias.push({
-        tipo_prueba: prueba.nombrePrueba || prueba.categoria || 'No especificada',
-        resultado: prueba.resultado || null,
-        fecha_prueba: null,
-        interpretacion: null,
-        observaciones: prueba.codigoCUPS ? `CUPS: ${prueba.codigoCUPS}` : null,
-      });
-    });
-  }
-
-  // Construir objeto final para el backend
-  const datosBackend: any = {
-    deportista_id: dataFrontend.deportista_id,
-    fecha_apertura: hoy,
-    estado_id: dataFrontend.estado_id || '6203e531-aa6c-4490-a068-374c955bb197',
-  };
-
-  // Solo agregar campos si tienen datos
-  if (antecedentesPersonales.length > 0) {
-    datosBackend.antecedentes_personales = antecedentesPersonales;
-  }
-  if (antecedentesFamiliares.length > 0) {
-    datosBackend.antecedentes_familiares = antecedentesFamiliares;
-  }
-  if (lesionesDeportivas.length > 0) {
-    datosBackend.lesiones_deportivas = lesionesDeportivas;
-  }
-  if (cirugiasPrevias.length > 0) {
-    datosBackend.cirugias_previas = cirugiasPrevias;
-  }
-  if (alergias.length > 0) {
-    datosBackend.alergias = alergias;
-  }
-  if (medicaciones.length > 0) {
-    datosBackend.medicaciones = medicaciones;
-  }
-  if (diagnosticos.length > 0) {
-    datosBackend.diagnosticos = diagnosticos;
-  }
-  if (signosVitales) {
-    datosBackend.signos_vitales = signosVitales;
-  }
-  if (remisionesEspecialistas.length > 0) {
-    datosBackend.remisiones_especialistas = remisionesEspecialistas;
-  }
-  if (planTratamiento) {
-    datosBackend.plan_tratamiento = planTratamiento;
-  }
-  if (motivoConsultaEnfermedad) {
-    datosBackend.motivo_consulta_enfermedad = motivoConsultaEnfermedad;
-  }
-  if (exploracionFisicaSistemas) {
-    datosBackend.exploracion_fisica_sistemas = exploracionFisicaSistemas;
-  }
-  if (revisionSistemas.length > 0) {
-    datosBackend.revision_sistemas = revisionSistemas;
-  }
-  if (pruebasComplementarias.length > 0) {
-    datosBackend.pruebas_complementarias = pruebasComplementarias;
-  }
-
-  console.log('📤 Datos transformados para backend:', JSON.stringify(datosBackend, null, 2));
-  return datosBackend;
-}
-
-// ============================================================================
-// SERVICIOS: HISTORIAS CLÍNICAS
-// ============================================================================
-
-export const historiaClinicaService = {
-  async getAll(page: number = 1, page_size: number = 10) {
-    const response = await api.get<PaginatedResponse<HistoriaClinica>>(
-      '/historias_clinicas',
-      {
-        params: { page, page_size },
-      }
-    );
-    return response.data;
+// ── Historias clínicas ───────────────────────────────────────
+export const historiasService = {
+  async getAll(page = 1, page_size = 10) {
+    const { data } = await api.get<PaginatedResponse<HistoriaClinica>>('/historias_clinicas', { params: { page, page_size } });
+    return data;
   },
-
   async getById(id: string) {
-    const response = await api.get<HistoriaClinica>(`/historias_clinicas/${id}`);
-    return response.data;
+    const { data } = await api.get<HistoriaClinica>(`/historias_clinicas/${id}`);
+    return data;
   },
-
-  async getByDeportistaId(deportistaId: string) {
-    const response = await api.get<HistoriaClinica[]>(
-      `/deportistas/${deportistaId}/historias_clinicas`
-    );
-    return response.data;
+  async getCompleta(id: string) {
+    const { data } = await api.get(`/historias_clinicas/${id}/completa`);
+    return data;
   },
-
-  async create(data: HistoriaClinica) {
-    const response = await api.post<HistoriaClinica>(
-      '/historias_clinicas',
-      data
-    );
-    return response.data;
-  },
-
-  async update(id: string, data: Partial<HistoriaClinica>) {
-    const response = await api.put<HistoriaClinica>(
-      `/historias_clinicas/${id}`,
-      data
-    );
-    return response.data;
-  },
-
   async delete(id: string) {
     await api.delete(`/historias_clinicas/${id}`);
   },
-
-  async crearCompleta(data: any) {
-    // Transformar datos del formato del frontend al formato del backend
-    const datosTransformados = transformarDatosHistoriaClinica(data);
-    
-    const response = await api.post<any>(
-      '/historias_clinicas/completa',
-      datosTransformados
-    );
-    return response.data;
+  async crear(body: unknown) {
+    const { data } = await api.post('/historias_clinicas/completa', body);
+    return data;
   },
-
-  async obtenerCompleta(historiaId: string) {
-    const response = await api.get<any>(
-      `/historias_clinicas/${historiaId}/completa`
-    );
-    return response.data;
+  async crearCompleta(body: unknown) {
+    const { data } = await api.post('/historias_clinicas/completa', body);
+    return data;
   },
-
-  async obtenerDatosCompletos(historiaId: string) {
-    const response = await api.get<any>(
-      `/historias_clinicas/${historiaId}/datos-completos`
-    );
-    return response.data;
+  async getByDeportista(deportistaId: string) {
+    const { data } = await api.get(`/historias_clinicas/deportista/${deportistaId}`);
+    return data;
   },
 };
 
-// ============================================================================
-// SERVICIOS: RESPUESTA GRUPOS
-// ============================================================================
+// Alias usado por componentes existentes
+export const historiaClinicaService = historiasService;
 
-export const respuestaGruposService = {
-  async getAll(page: number = 1, page_size: number = 10) {
-    const response = await api.get<PaginatedResponse<RespuestaGrupo>>(
-      '/respuesta_grupos',
-      {
-        params: { page, page_size },
-      }
-    );
-    return response.data;
-  },
-
-  async getById(id: string) {
-    const response = await api.get<RespuestaGrupo>(`/respuesta_grupos/${id}`);
-    return response.data;
-  },
-
-  async getByHistoriaId(historiaId: string) {
-    const response = await api.get<RespuestaGrupo[]>(
-      `/historias_clinicas/${historiaId}/respuesta_grupos`
-    );
-    return response.data;
-  },
-
-  async create(data: RespuestaGrupo) {
-    const response = await api.post<RespuestaGrupo>('/respuesta_grupos', data);
-    return response.data;
-  },
-
-  async delete(id: string) {
-    await api.delete(`/respuesta_grupos/${id}`);
-  },
-};
-
-// ============================================================================
-// SERVICIOS: FORMULARIO RESPUESTAS
-// ============================================================================
-
-export const formularioRespuestasService = {
-  async getAll(page: number = 1, page_size: number = 10) {
-    const response = await api.get<PaginatedResponse<FormularioRespuesta>>(
-      '/formulario_respuestas',
-      {
-        params: { page, page_size },
-      }
-    );
-    return response.data;
-  },
-
-  async getById(id: string) {
-    const response = await api.get<FormularioRespuesta>(
-      `/formulario_respuestas/${id}`
-    );
-    return response.data;
-  },
-
-  async create(data: FormularioRespuesta) {
-    const response = await api.post<FormularioRespuesta>(
-      '/formulario_respuestas',
-      data
-    );
-    return response.data;
-  },
-
-  async update(id: string, data: Partial<FormularioRespuesta>) {
-    const response = await api.put<FormularioRespuesta>(
-      `/formulario_respuestas/${id}`,
-      data
-    );
-    return response.data;
-  },
-
-  async delete(id: string) {
-    await api.delete(`/formulario_respuestas/${id}`);
-  },
-};
-
-// ============================================================================
-// SERVICIOS: CITAS
-// ============================================================================
-
+// ── Citas ────────────────────────────────────────────────────
 export const citasService = {
-  async getDeportistasConCitasHoy() {
-    const response = await api.get<Deportista[]>(
-      '/citas/deportistas-con-citas-hoy'
-    );
-    return response.data;
+  async getAll() {
+    const { data } = await api.get<Cita[]>('/citas');
+    return data;
   },
-
-  async getAll(page: number = 1, page_size: number = 10) {
-    const response = await api.get<PaginatedResponse<Cita>>('/citas', {
-      params: { page, page_size },
-    });
-    return response.data;
+  async getByDeportista(deportistaId: string) {
+    const { data } = await api.get<Cita[]>(`/citas/deportista/${deportistaId}`);
+    return data;
   },
-
-  async getById(id: string) {
-    const response = await api.get<Cita>(`/citas/${id}`);
-    return response.data;
+  async create(body: Omit<Cita, 'id' | 'created_at'>) {
+    const { data } = await api.post<Cita>('/citas', body);
+    return data;
   },
-
-  async getByDeportistaId(deportistaId: string) {
-    const response = await api.get<Cita[]>(
-      `/deportistas/${deportistaId}/citas`
-    );
-    return response.data;
+  async update(id: string, body: Partial<Cita>) {
+    const { data } = await api.put<Cita>(`/citas/${id}`, body);
+    return data;
   },
-
-  async getProximas(deportistaId: string) {
-    const response = await api.get<Cita[]>(
-      `/deportistas/${deportistaId}/citas/proximas`
-    );
-    return response.data;
-  },
-
-  async create(data: Cita) {
-    const response = await api.post<Cita>('/citas', data);
-    return response.data;
-  },
-
-  async update(id: string, data: Partial<Cita>) {
-    const response = await api.put<Cita>(`/citas/${id}`, data);
-    return response.data;
-  },
-
-  async delete(id: string) {
+  async remove(id: string) {
     await api.delete(`/citas/${id}`);
   },
 };
 
-// ============================================================================
-// SERVICIOS: ARCHIVOS CLÍNICOS
-// ============================================================================
-
+// ── Archivos ─────────────────────────────────────────────────
 export const archivosService = {
-  async getByHistoriaId(historiaId: string) {
-    const response = await api.get<ArchivoCinico[]>(
-      `/historias_clinicas/${historiaId}/archivos_clinicos`
-    );
-    return response.data;
+  async getByHistoria(historiaId: string) {
+    const { data } = await api.get(`/archivos/historia/${historiaId}`);
+    return data;
   },
-
-  async upload(data: {
-    historia_clinica_id: string;
-    formulario_id?: string;
-    grupo_id?: string;
-    archivo: File;
-  }) {
-    const formData = new FormData();
-    formData.append('historia_clinica_id', data.historia_clinica_id);
-    if (data.formulario_id) {
-      formData.append('formulario_id', data.formulario_id);
-    }
-    if (data.grupo_id) {
-      formData.append('grupo_id', data.grupo_id);
-    }
-    formData.append('archivo', data.archivo);
-
-    const response = await api.post<ArchivoCinico>(
-      '/archivos_clinicos',
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
-    );
-    return response.data;
+  async getAll(params?: { deportista_id?: string; historia_clinica_id?: string }) {
+    const { data } = await api.get('/archivos', { params });
+    return data;
   },
+  async subir(historiaId: string, archivo: File, descripcion?: string) {
+    const form = new FormData();
+    form.append('archivo', archivo);
+    if (descripcion) form.append('descripcion', descripcion);
+    const { data } = await api.post(`/archivos/historia/${historiaId}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+  async descargar(archivoId: string) {
+    const { data } = await api.get(`/archivos/${archivoId}/descargar`, { responseType: 'blob' });
+    return data;
+  },
+  async remove(archivoId: string) {
+    await api.delete(`/archivos/${archivoId}`);
+  },
+};
 
-  async descargar(id: string) {
-    const response = await api.get(`/archivos_clinicos/${id}/descargar`, {
+// Alias para compatibilidad
+export { archivosService as ArchivoCinico };
+
+// ── Documentos / PDF ─────────────────────────────────────────
+export const documentosService = {
+  async generarPDF(historiaId: string) {
+    const { data } = await api.get(`/documentos/historia/${historiaId}/pdf`, { responseType: 'blob' });
+    return data;
+  },
+  async descargarHistoriaClinicaPdf(historiaId: string) {
+    const response = await api.get(`/documentos/${historiaId}/pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `historia_clinica_${historiaId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+  async enviarEmail(historiaId: string, email: string) {
+    const { data } = await api.post(`/documentos/historia/${historiaId}/email`, { email });
+    return data;
+  },
+  async generarToken(historiaId: string) {
+    const { data } = await api.post(`/descarga-segura/generar/${historiaId}`);
+    return data;
+  },
+  async descargarConToken(token: string, cedula: string) {
+    const { data } = await api.get(`/descarga-segura/descargar-pdf/${token}`, {
+      params: { cedula },
       responseType: 'blob',
     });
-    return response.data;
-  },
-
-  async delete(id: string) {
-    await api.delete(`/archivos_clinicos/${id}`);
+    return data;
   },
 };
 
-// ============================================================================
-// SERVICIOS: FORMULARIOS
-// ============================================================================
-
+// ── Formularios / respuestas ─────────────────────────────────
 export const formulariosService = {
   async getAll() {
-    const response = await api.get<Formulario[]>('/formularios');
-    return response.data;
+    const { data } = await api.get('/formularios');
+    return data;
   },
-
-  async getById(id: string) {
-    const response = await api.get<Formulario>(`/formularios/${id}`);
-    return response.data;
-  },
-
   async getByModulo(modulo: string) {
-    const response = await api.get<Formulario[]>('/formularios', {
-      params: { modulo },
-    });
-    return response.data;
+    const { data } = await api.get('/formularios', { params: { modulo } });
+    return data;
   },
 };
 
-// ============================================================================
-// SERVICIOS: PLANTILLAS
-// ============================================================================
-
-export const plantillasService = {
-  async getBySystem(sistema: string) {
-    const response = await api.get<PlantillaClinica>(
-      `/plantillas_clinicas/${sistema}`
-    );
-    return response.data;
+export const respuestaGruposService = {
+  async getByHistoriaId(id: string) {
+    const { data } = await api.get(`/historias_clinicas/${id}/grupos`);
+    return data;
   },
-
-  async getAll() {
-    const response = await api.get<PlantillaClinica[]>(
-      '/plantillas_clinicas'
-    );
-    return response.data;
+  async create(body: unknown) {
+    const { data } = await api.post('/grupos_respuesta', body);
+    return data;
   },
 };
 
-// ============================================================================
-// SERVICIOS: DOCUMENTOS
-// ============================================================================
-
-export const documentosService = {
-  async descargarHistoriaClinicaPdf(historiaId: string) {
-    try {
-      const response = await api.get(
-        `/documentos/${historiaId}/historia-clinica-pdf`,
-        {
-          responseType: 'blob'
-        }
-      );
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `historia_clinica_${historiaId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      return true;
-    } catch (error) {
-      console.error('Error descargando PDF:', error);
-      throw error;
-    }
+export const formularioRespuestasService = {
+  async getByHistoriaId(id: string) {
+    const { data } = await api.get(`/historias_clinicas/${id}/respuestas`);
+    return data;
   },
-
-  // Generar link seguro para compartir por WhatsApp
-  async generarLinkSeguro(historiaId: string) {
-    const response = await api.post(`/descarga-segura/generar/${historiaId}`);
-    return response.data;
+  async create(body: unknown) {
+    const { data } = await api.post('/respuestas_formulario', body);
+    return data;
   },
-
-  // Verificar token de descarga
-  async verificarToken(token: string, numeroCedula: string) {
-    const response = await api.post(`/descarga-segura/verificar/${token}`, {
-      numero_cedula: numeroCedula
-    });
-    return response.data;
+  async createBulk(body: unknown[]) {
+    const { data } = await api.post('/respuestas_formulario/bulk', body);
+    return data;
   },
 };
 
-// ============================================================================
-// HEALTH CHECK
-// ============================================================================
-
-export async function healthCheck(): Promise<boolean> {
-  try {
-    const response = await api.get('/health');
-    return response.status === 200;
-  } catch {
-    return false;
-  }
-}
-
-// ============================================================================
-// EXPORT DEFAULT
-// ============================================================================
-
-export default {
-  api,
-  catalogosService,
-  deportistasService,
-  historiaClinicaService,
-  respuestaGruposService,
-  formularioRespuestasService,
-  citasService,
-  archivosService,
-  formulariosService,
-  plantillasService,
-  documentosService,
-  healthCheck,
+// ── Configuración institución ────────────────────────────────
+export const institucionService = {
+  async get() {
+    const { data } = await api.get<ConfiguracionInstitucion>('/configuracion');
+    return data;
+  },
+  async update(body: Partial<ConfiguracionInstitucion>) {
+    const { data } = await api.put<ConfiguracionInstitucion>('/configuracion', body);
+    return data;
+  },
 };
+
+// ── Re-exportar tipos para imports directos ──────────────────
+export type {
+  CatalogoItem, Deportista, DeportistaCreate,
+  Vacuna, VacunaCreate, HistoriaClinica, Cita,
+  ConfiguracionInstitucion, PaginatedResponse,
+} from '../../types';
+
+// Alias de tipo para compatibilidad
+export type { HistoriaClinica as HistoriaClinicaType } from '../../types';
+export type Formulario = { id?: string; nombre: string; modulo: string; activo: boolean };
+export type RespuestaGrupo = { id?: string; historia_clinica_id: string; formulario_id: string };
+export type FormularioRespuesta = { id?: string; formulario_id: string; historia_clinica_id: string; campo_id: string; valor?: string; grupo_id?: string };
+export type ArchivoCinicoType = { id?: string; historia_clinica_id: string; nombre_archivo?: string; ruta_archivo: string; tipo_archivo?: string };

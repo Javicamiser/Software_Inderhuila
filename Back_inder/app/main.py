@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 from app.models import *
 
+from app.api.v1.auth import router as auth_router
+
 from app.api.v1 import deportistas, historias, citas, archivos, cie11, cups, catalogos, antecedentes, documentos
 from app.api.v1.descarga_segura import router as descarga_segura_router
 
@@ -61,4 +63,5 @@ app.include_router(cups.router, prefix="/api/v1/cups")
 app.include_router(catalogos.router, prefix="/api/v1/catalogos")
 app.include_router(antecedentes.router, prefix="/api/v1")
 app.include_router(documentos.router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(descarga_segura_router, prefix="/api/v1")

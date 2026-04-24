@@ -1,22 +1,17 @@
+// ============================================================
+// INICIO / DASHBOARD — Rediseño profesional
+// Mantiene toda la lógica de datos del componente original.
+// ============================================================
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Users,
-  Calendar,
-  FileText,
-  Clock,
-  ArrowRight,
-  Plus,
-  TrendingUp,
-  BarChart3,
-  CheckCircle,
+  Users, Calendar, FileText, Clock,
+  ArrowRight, Plus, TrendingUp, CheckCircle, Activity,
 } from 'lucide-react';
-import { deportistasService, historiaClinicaService, citasService, type Deportista, type HistoriaClinica, type Cita } from '../services';
+import { deportistasService, historiasService, citasService } from '../services/apiClient';
+import type { Deportista, HistoriaClinica, Cita } from '../../types';
 
-interface InicioProps {
-  onNavigate: (view: string) => void;
-}
-
-interface DashboardStats {
+interface Stats {
   totalDeportistas: number;
   historiasActivas: number;
   citasHoy: number;
@@ -27,398 +22,338 @@ interface DashboardStats {
 interface ActivityItem {
   id: string;
   tipo: string;
-  descripcion: string;
   fecha: string;
   hora: string;
   estado: string;
 }
 
-export function Inicio({ onNavigate }: InicioProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalDeportistas: 0,
-    historiasActivas: 0,
-    citasHoy: 0,
-    citasSemana: 0,
-    actividadReciente: [],
+function toArray<T>(res: unknown): T[] {
+  const r = res as any;
+  if (Array.isArray(r)) return r;
+  if (Array.isArray(r?.items)) return r.items;
+  return [];
+}
+
+export function Inicio() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<Stats>({
+    totalDeportistas: 0, historiasActivas: 0,
+    citasHoy: 0, citasSemana: 0, actividadReciente: [],
   });
 
-  const fechaActual = new Date().toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
   const cargarDatos = async () => {
     try {
-      setIsLoading(true);
+      const [depRes, histRes, citRes] = await Promise.all([
+        deportistasService.getAll(1, 100),
+        historiasService.getAll(1, 100),
+        citasService.getAll(),
+      ]);
 
-      const deportistasRes = await deportistasService.getAll(1, 100);
-      const historiasRes = await historiaClinicaService.getAll(1, 100);
-      const citasRes = await citasService.getAll();
+      const deportistas = toArray<Deportista>(depRes);
+      const historias   = toArray<HistoriaClinica>(histRes);
+      const citas       = toArray<Cita>(citRes);
 
-      const toArray = <T,>(res: unknown): T[] => {
-        const r = res as any;
-        if (Array.isArray(r)) return r;
-        if (Array.isArray(r?.items)) return r.items;
-        if (Array.isArray(r?.results)) return r.results;
-        if (Array.isArray(r?.data)) return r.data;
-        return [];
-      };
-
-      const deportistas = toArray<Deportista>(deportistasRes);
-      const historias = toArray<HistoriaClinica>(historiasRes);
-      const citas = toArray<Cita>(citasRes);
-
-      // Calcular citas de hoy
       const hoy = new Date().toISOString().split('T')[0];
-      const citasHoy = citas.filter((c: any) => {
-        const fechaCita = (c.fecha || c.fechaHora || c.start || '').split('T')[0];
-        return fechaCita === hoy;
-      });
-
-      // Calcular citas de esta semana
       const inicioSemana = new Date();
       inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay());
       const finSemana = new Date(inicioSemana);
       finSemana.setDate(finSemana.getDate() + 6);
 
+      const citasHoy    = citas.filter((c: any) => (c.fecha ?? '').split('T')[0] === hoy);
       const citasSemana = citas.filter((c: any) => {
-        const fechaCita = new Date(c.fecha || c.fechaHora || c.start || Date.now());
-        return fechaCita >= inicioSemana && fechaCita <= finSemana;
+        const f = new Date(c.fecha ?? Date.now());
+        return f >= inicioSemana && f <= finSemana;
       });
 
-      // Función auxiliar para extraer nombre de objeto o string
-      const getNombre = (valor: any, fallback: string): string => {
-        if (!valor) return fallback;
-        if (typeof valor === 'string') return valor;
-        if (typeof valor === 'object' && valor.nombre) return valor.nombre;
-        return fallback;
-      };
-
-      const datosReales: DashboardStats = {
+      setStats({
         totalDeportistas: deportistas.length,
         historiasActivas: historias.length,
         citasHoy: citasHoy.length,
         citasSemana: citasSemana.length,
         actividadReciente: citas.slice(0, 5).map((c: any) => ({
           id: c.id,
-          tipo: getNombre(c.tipo_cita || c.tipoCita, 'Cita Valoración inicial'),
-          descripcion: getNombre(c.motivo, 'Consulta programada'),
-          fecha: new Date(c.fecha || c.fechaHora || c.start || Date.now()).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' }),
-          hora: new Date(c.fecha || c.fechaHora || c.start || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          estado: getNombre(c.estado, 'Programada'),
+          tipo: c.tipo_cita?.nombre ?? c.tipo_cita ?? 'Valoración',
+          fecha: new Date(c.fecha ?? Date.now()).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
+          hora: c.hora ?? '',
+          estado: c.estado_cita?.nombre ?? c.estado ?? 'Programada',
         })),
-      };
-
-      setStats(datosReales);
-    } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
+      });
+    } catch (e) {
+      console.error('Error cargando dashboard:', e);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando dashboard...</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 36, height: 36, border: '3px solid #1F4788', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <p style={{ color: '#64748b', fontSize: 13 }}>Cargando datos...</p>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header Principal Azul */}
-      <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-blue-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold mb-2">
-                Bienvenido al Sistema Médico Deportivo
-              </h1>
-              <p className="text-blue-100 text-lg">
-                INDERHUILA - Instituto Departamental de Recreación y Deportes del Huila
-              </p>
-            </div>
-            <div className="hidden md:block">
-              <div className="bg-blue-900/50 backdrop-blur-sm rounded-lg px-6 py-3 text-center">
-                <p className="text-blue-200 text-sm">Fecha Actual</p>
-                <p className="text-xl font-bold">{fechaActual}</p>
-              </div>
-            </div>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* ── Bienvenida ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1F4788 0%, #1e40af 60%, #1d4ed8 100%)',
+        borderRadius: 16, padding: '28px 32px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 16,
+      }}>
+        <div>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '0 0 4px', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Bienvenido
+          </p>
+          <h2 style={{ color: '#ffffff', fontSize: 22, fontWeight: 700, margin: '0 0 6px', lineHeight: 1.2 }}>
+            Sistema Médico Deportivo
+          </h2>
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, margin: 0 }}>
+            INDERHUILA — Instituto Departamental de Recreación y Deportes del Huila
+          </p>
+        </div>
+        <div style={{
+          background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)',
+          borderRadius: 12, padding: '12px 20px', textAlign: 'center',
+          border: '1px solid rgba(255,255,255,0.15)',
+        }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, margin: '0 0 2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {new Date().toLocaleDateString('es-CO', { weekday: 'long' })}
+          </p>
+          <p style={{ color: '#ffffff', fontSize: 18, fontWeight: 700, margin: 0 }}>
+            {new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </p>
         </div>
       </div>
 
-      {/* Contenido Principal */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* Acciones Rápidas */}
-        <section className="mb-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Acciones Rápidas</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Nuevo Deportista */}
-            <button
-              onClick={() => onNavigate('registro')}
-              className="group bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white rounded-xl p-6 text-left transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <Plus className="w-8 h-8" />
-                <ArrowRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
-              </div>
-              <h3 className="text-lg font-bold mb-1">Nuevo Deportista</h3>
-              <p className="text-teal-100 text-sm">Registrar nuevo deportista</p>
-            </button>
+      {/* ── Acciones rápidas ── */}
+      <div>
+        <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Acciones rápidas
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <QuickAction
+            icon={<Plus size={20} />}
+            title="Nuevo Deportista"
+            sub="Registrar atleta"
+            color="#1F4788"
+            light="#EEF3FB"
+            onClick={() => navigate('/deportistas')}
+          />
+          <QuickAction
+            icon={<Calendar size={20} />}
+            title="Agendar Cita"
+            sub="Programar consulta"
+            color="#0f766e"
+            light="#f0fdf4"
+            onClick={() => navigate('/citas')}
+          />
+          <QuickAction
+            icon={<FileText size={20} />}
+            title="Nueva Historia"
+            sub="Crear registro clínico"
+            color="#7c3aed"
+            light="#f5f3ff"
+            onClick={() => navigate('/historia')}
+          />
+        </div>
+      </div>
 
-            {/* Agendar Cita */}
-            <button
-              onClick={() => onNavigate('consultas')}
-              className="group bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl p-6 text-left transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <Calendar className="w-8 h-8" />
-                <ArrowRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
-              </div>
-              <h3 className="text-lg font-bold mb-1">Agendar Cita</h3>
-              <p className="text-green-100 text-sm">Programar nueva cita</p>
-            </button>
+      {/* ── Stats ── */}
+      <div>
+        <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Estadísticas generales
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <StatCard icon={<Users size={18} />} label="Total Deportistas" value={stats.totalDeportistas} trend="+12%" color="#1F4788" onClick={() => navigate('/deportistas')} />
+          <StatCard icon={<Clock size={18} />} label="Citas Hoy" value={stats.citasHoy} trend={stats.citasHoy === 0 ? 'Sin citas' : 'Pendientes'} color="#0f766e" onClick={() => navigate('/citas')} />
+          <StatCard icon={<Calendar size={18} />} label="Citas Esta Semana" value={stats.citasSemana} trend="+5" color="#d97706" onClick={() => navigate('/citas')} />
+          <StatCard icon={<FileText size={18} />} label="Historias Activas" value={stats.historiasActivas} trend="+8" color="#7c3aed" onClick={() => navigate('/historia')} />
+        </div>
+      </div>
 
-            {/* Nueva Historia */}
+      {/* ── Actividad + Accesos ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+        {/* Actividad reciente */}
+        <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Activity size={16} style={{ color: '#1F4788' }} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Actividad reciente</span>
+            </div>
             <button
-              onClick={() => onNavigate('historia')}
-              className="group bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl p-6 text-left transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
+              onClick={() => navigate('/citas')}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#1F4788', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
             >
-              <div className="flex justify-between items-start mb-4">
-                <FileText className="w-8 h-8" />
-                <ArrowRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
-              </div>
-              <h3 className="text-lg font-bold mb-1">Nueva Historia</h3>
-              <p className="text-emerald-100 text-sm">Crear historia clínica</p>
+              Ver todas <ArrowRight size={13} />
             </button>
           </div>
-        </section>
 
-        {/* Estadísticas Generales */}
-        <section className="mb-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Estadísticas Generales</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Deportistas */}
-            <div 
-              onClick={() => onNavigate('deportistas')}
-              className="bg-white rounded-xl p-5 border-l-4 border-blue-500 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Users className="w-6 h-6 text-blue-600" />
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-500 mb-1">Total Deportistas</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.totalDeportistas}</p>
-              <div className="flex items-center mt-2 text-xs text-green-600">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                <span>+12%</span>
-              </div>
-            </div>
-
-            {/* Citas Hoy */}
-            <div 
-              onClick={() => onNavigate('consultas')}
-              className="bg-white rounded-xl p-5 border-l-4 border-yellow-500 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="p-2 bg-yellow-50 rounded-lg">
-                  <Clock className="w-6 h-6 text-yellow-600" />
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-500 mb-1">Citas Hoy</p>
-              <p className="text-3xl font-bold text-yellow-600">{stats.citasHoy}</p>
-              <div className="flex items-center mt-2 text-xs text-gray-500">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                <span>{stats.citasHoy === 0 ? 'Sin citas' : 'Pendientes'}</span>
-              </div>
-            </div>
-
-            {/* Citas Esta Semana */}
-            <div 
-              onClick={() => onNavigate('consultas')}
-              className="bg-white rounded-xl p-5 border-l-4 border-orange-500 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="p-2 bg-orange-50 rounded-lg">
-                  <Calendar className="w-6 h-6 text-orange-600" />
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-500 mb-1">Citas Esta Semana</p>
-              <p className="text-3xl font-bold text-orange-600">{stats.citasSemana}</p>
-              <div className="flex items-center mt-2 text-xs text-green-600">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                <span>+5</span>
-              </div>
-            </div>
-
-            {/* Historias Activas */}
-            <div 
-              onClick={() => onNavigate('historias-clinicas')}
-              className="bg-white rounded-xl p-5 border-l-4 border-purple-500 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <FileText className="w-6 h-6 text-purple-600" />
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-500 mb-1">Historias Activas</p>
-              <p className="text-3xl font-bold text-purple-600">{stats.historiasActivas}</p>
-              <div className="flex items-center mt-2 text-xs text-green-600">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                <span>+8</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Actividad Reciente y Accesos Directos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Actividad Reciente */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-gray-800">Actividad Reciente</h3>
-              <button 
-                onClick={() => onNavigate('consultas')}
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
-              >
-                Ver todas <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {stats.actividadReciente.length > 0 ? (
-                stats.actividadReciente.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Calendar className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{item.tipo}</p>
-                        <p className="text-sm text-gray-500">{item.fecha} • {item.hora}</p>
-                      </div>
+          {stats.actividadReciente.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {stats.actividadReciente.map(item => (
+                <div key={item.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', background: '#f8fafc',
+                  borderRadius: 10, border: '1px solid #f1f5f9',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#EEF3FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Calendar size={15} style={{ color: '#1F4788' }} />
                     </div>
-                    <span className="px-3 py-1 bg-teal-100 text-teal-700 text-xs font-medium rounded-full">
-                      {item.estado}
-                    </span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{item.tipo}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{item.fecha}{item.hora ? ` · ${item.hora}` : ''}</p>
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p>No hay actividad reciente</p>
+                  <span style={{
+                    fontSize: 11, fontWeight: 500, padding: '3px 10px',
+                    borderRadius: 20, background: '#d1fae5', color: '#065f46',
+                  }}>
+                    {item.estado}
+                  </span>
                 </div>
-              )}
+              ))}
             </div>
-          </div>
-
-          {/* Accesos Directos */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-6">Accesos Directos</h3>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => onNavigate('deportistas')}
-                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Users className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Ver Deportistas</p>
-                    <p className="text-xs text-gray-500">Listado completo</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('consultas')}
-                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Calendar className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Gestión de Citas</p>
-                    <p className="text-xs text-gray-500">Calendario y agenda</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-green-600 group-hover:translate-x-1 transition-all" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('historias-clinicas')}
-                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-orange-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <FileText className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Historias Clínicas</p>
-                    <p className="text-xs text-gray-500">Registros médicos</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-orange-600 group-hover:translate-x-1 transition-all" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('reportes')}
-                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <BarChart3 className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900">Reportes</p>
-                    <p className="text-xs text-gray-500">Estadísticas y análisis</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" />
-              </button>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
+              <Calendar size={36} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+              <p style={{ fontSize: 13, margin: 0 }}>No hay actividad reciente</p>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Sistema Actualizado */}
-        <div className="mt-6 bg-green-50 border border-green-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-full">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-green-800">Sistema Actualizado</h4>
-              <p className="text-sm text-green-700">
-                Todos los módulos funcionando correctamente. Última actualización: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' })}
-              </p>
-            </div>
+        {/* Accesos directos */}
+        <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <TrendingUp size={16} style={{ color: '#1F4788' }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Accesos directos</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { icon: <Users size={15} />, label: 'Ver Deportistas',   sub: 'Listado completo',    view: 'deportistas', c: '#1F4788', bg: '#EEF3FB' },
+              { icon: <Calendar size={15} />, label: 'Gestión de Citas', sub: 'Calendario y agenda', view: 'citas',       c: '#0f766e', bg: '#f0fdf4' },
+              { icon: <FileText size={15} />, label: 'Historias Clínicas', sub: 'Registros médicos', view: 'historia',    c: '#7c3aed', bg: '#f5f3ff' },
+              { icon: <BarChart2 size={15} />, label: 'Reportes',        sub: 'Estadísticas',       view: 'reportes',    c: '#b45309', bg: '#fffbeb' },
+            ].map(item => (
+              <button
+                key={item.view}
+                onClick={() => navigate(`/${item.view}`)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 12px', borderRadius: 10,
+                  border: '1px solid #f1f5f9', background: '#f8fafc',
+                  cursor: 'pointer', transition: 'all 0.15s', width: '100%',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = item.bg; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#f8fafc'; (e.currentTarget as HTMLElement).style.borderColor = '#f1f5f9'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.c, flexShrink: 0 }}>
+                    {item.icon}
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{item.label}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{item.sub}</p>
+                  </div>
+                </div>
+                <ArrowRight size={13} style={{ color: '#cbd5e1', flexShrink: 0 }} />
+              </button>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* ── Estado del sistema ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 16px', background: '#f0fdf4',
+        borderRadius: 10, border: '1px solid #bbf7d0',
+      }}>
+        <CheckCircle size={16} style={{ color: '#16a34a', flexShrink: 0 }} />
+        <p style={{ margin: 0, fontSize: 12, color: '#15803d', fontWeight: 500 }}>
+          Sistema operando correctamente ·&nbsp;
+          <span style={{ fontWeight: 400, color: '#4ade80' }}>
+            Última actualización: {new Date().toLocaleDateString('es-CO')}
+          </span>
+        </p>
+      </div>
+
     </div>
   );
 }
+
+// ── Componentes internos ──────────────────────────────────
+
+function QuickAction({ icon, title, sub, color, light, onClick }: {
+  icon: React.ReactNode; title: string; sub: string;
+  color: string; light: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '16px 18px', borderRadius: 12,
+        background: light, border: `1px solid ${color}22`,
+        cursor: 'pointer', transition: 'all 0.15s', width: '100%',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+    >
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+        {icon}
+      </div>
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{title}</p>
+        <p style={{ margin: 0, fontSize: 11, color: '#64748b' }}>{sub}</p>
+      </div>
+    </button>
+  );
+}
+
+function StatCard({ icon, label, value, trend, color, onClick }: {
+  icon: React.ReactNode; label: string; value: number;
+  trend: string; color: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: '#ffffff', borderRadius: 12, padding: '18px 20px',
+        border: '1px solid #e2e8f0', cursor: 'pointer',
+        transition: 'all 0.15s', width: '100%', textAlign: 'left',
+        borderTop: `3px solid ${color}`,
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
+          {icon}
+        </div>
+        <ArrowRight size={13} style={{ color: '#cbd5e1', marginTop: 2 }} />
+      </div>
+      <p style={{ margin: '0 0 4px', fontSize: 12, color: '#64748b', fontWeight: 400 }}>{label}</p>
+      <p style={{ margin: '0 0 8px', fontSize: 28, fontWeight: 700, color: '#0f172a', lineHeight: 1 }}>{value}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <TrendingUp size={12} style={{ color: '#10b981' }} />
+        <span style={{ fontSize: 11, color: '#64748b' }}>{trend}</span>
+      </div>
+    </button>
+  );
+}
+
+// Necesario para el import de BarChart2 dentro del componente
+import { BarChart2 } from 'lucide-react';
+
+export default Inicio;

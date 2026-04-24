@@ -5,6 +5,7 @@ from app.models.archivo import ArchivoClinico
 from app.models.cita import Cita
 from app.models.catalogo import Catalogo, CatalogoItem
 from app.models.plantilla import PlantillaClinica
+from app.models.usuario import Usuario, Rol, Permiso
 from app.models.antecedentes import (
     AntecedentesPersonales, AntecedentesFamiliares, LesioneDeportivas,
     CirugiasPrivas, Alergias, Medicaciones, VacunasAdministradas,

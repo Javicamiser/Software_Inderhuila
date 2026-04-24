@@ -1,64 +1,62 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { catalogosService, CatalogoItem } from '../services/apiClient';
+// ============================================================
+// CATALOGOS CONTEXT
+// Carga todos los catálogos una sola vez al iniciar la app.
+// Cualquier componente puede usarlos sin hacer fetch propio.
+// ============================================================
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { catalogosService } from '../services/apiClient';
+import type { CatalogoItem } from '../../types';
 
-export interface Catalogos {
+interface CatalogosContextValue {
   tiposDocumento: CatalogoItem[];
-  sexos: CatalogoItem[];
-  estados: CatalogoItem[];
-  tiposCita: CatalogoItem[];
-  estadosCita: CatalogoItem[];
+  sexos:          CatalogoItem[];
+  estados:        CatalogoItem[];
+  tiposCita:      CatalogoItem[];
+  estadosCita:    CatalogoItem[];
+  loading:        boolean;
+  error:          string | null;
 }
 
-interface CatalogosContextType {
-  catalogos: Catalogos;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-}
+const CatalogosContext = createContext<CatalogosContextValue>({
+  tiposDocumento: [],
+  sexos:          [],
+  estados:        [],
+  tiposCita:      [],
+  estadosCita:    [],
+  loading:        true,
+  error:          null,
+});
 
-const CatalogosContext = createContext<CatalogosContextType | undefined>(undefined);
-
-export const CatalogosProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [catalogos, setCatalogos] = useState<Catalogos>({
+export function CatalogosProvider({ children }: { children: ReactNode }) {
+  const [catalogos, setCatalogos] = useState<Omit<CatalogosContextValue, 'loading' | 'error'>>({
     tiposDocumento: [],
-    sexos: [],
-    estados: [],
-    tiposCita: [],
-    estadosCita: [],
+    sexos:          [],
+    estados:        [],
+    tiposCita:      [],
+    estadosCita:    [],
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const data = await catalogosService.getAllCatalogos();
-      setCatalogos(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error loading catalogos';
-      setError(message);
-      console.error('Error loading catalogos:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
-    refetch();
+    catalogosService.getAllCatalogos()
+      .then(data => {
+        setCatalogos(data);
+        setError(null);
+      })
+      .catch(() => setError('Error cargando catálogos'))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
-    <CatalogosContext.Provider value={{ catalogos, isLoading, error, refetch }}>
+    <CatalogosContext.Provider value={{ ...catalogos, loading, error }}>
       {children}
     </CatalogosContext.Provider>
   );
-};
+}
 
-export const useCatalogos = () => {
-  const context = useContext(CatalogosContext);
-  if (!context) {
-    throw new Error('useCatalogos must be used within CatalogosProvider');
-  }
-  return context;
-};
+export function useCatalogosContext() {
+  return useContext(CatalogosContext);
+}
+
+export default CatalogosContext;
