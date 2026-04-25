@@ -2,7 +2,7 @@
 // AUTH CONTEXT — estado global de sesión
 // ============================================================
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { api } from '@/app/services/apiClient';
+import { api, setAuthToken } from '@/app/services/apiClient';
 
 export interface UsuarioAuth {
   id: string;
@@ -40,9 +40,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const savedUsuario = localStorage.getItem('auth_usuario');
     if (savedToken && savedUsuario) {
       try {
+        setAuthToken(savedToken);
         setToken(savedToken);
         setUsuario(JSON.parse(savedUsuario));
-        api.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
       } catch { logout(); }
     }
     setLoading(false);
@@ -51,19 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const { data } = await api.post('/auth/login', { username, password });
     const { access_token, usuario: usr } = data;
+    setAuthToken(access_token);
     setToken(access_token);
     setUsuario(usr);
-    localStorage.setItem('auth_token', access_token);
     localStorage.setItem('auth_usuario', JSON.stringify(usr));
-    api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   };
 
   const logout = () => {
+    setAuthToken(null);
     setToken(null);
     setUsuario(null);
-    localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_usuario');
-    delete api.defaults.headers.common['Authorization'];
   };
 
   const isAdmin = usuario?.rol?.nombre === 'admin';

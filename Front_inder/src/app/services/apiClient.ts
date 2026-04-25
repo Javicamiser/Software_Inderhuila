@@ -9,7 +9,7 @@ import type {
   Vacuna, VacunaCreate, HistoriaClinica, Cita, ConfiguracionInstitucion,
 } from '../../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 const API_TIMEOUT  = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);
 
 // ── Instancia Axios ──────────────────────────────────────────
@@ -22,8 +22,26 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
+// Token en memoria para evitar condición de carrera con localStorage
+let _memToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  _memToken = token;
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    localStorage.setItem('auth_token', token);
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+    localStorage.removeItem('auth_token');
+  }
+}
+
+// Restaurar token al cargar el módulo
+const _savedToken = localStorage.getItem('auth_token');
+if (_savedToken) setAuthToken(_savedToken);
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
+  const token = _memToken || localStorage.getItem('auth_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -32,8 +50,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      // Solo redirigir si realmente no hay token (no es una petición pública)
+      const token = localStorage.getItem('auth_token');
+      const isAuthRoute = error.config?.url?.includes('/auth/');
+      if (!isAuthRoute && !token) {
+        window.location.href = '/login';
+      } else if (!isAuthRoute && token) {
+        // Token expirado — limpiar y redirigir
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_usuario');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -132,7 +159,7 @@ export const vacunasService = {
 // ── Historias clínicas ───────────────────────────────────────
 export const historiasService = {
   async getAll(page = 1, page_size = 10) {
-    const { data } = await api.get<PaginatedResponse<HistoriaClinica>>('/historias_clinicas', { params: { page, page_size } });
+    const { data } = await api.get<PaginatedResponse<HistoriaClinica>>('/historias_clinicas/', { params: { page, page_size } });
     return data;
   },
   async getById(id: string) {
@@ -154,10 +181,9 @@ export const historiasService = {
     const { data } = await api.post('/historias_clinicas/completa', body);
     return data;
   },
-   async getByDeportista(deportistaId: string) {
-    const { data } = await api.get('/historias_clinicas', { params: { page: 1, page_size: 1000 } });
-    const items = Array.isArray(data) ? data : (data?.items ?? []);
-    return items.filter((h: any) => h.deportista_id === deportistaId);
+  async getByDeportista(deportistaId: string) {
+    const { data } = await api.get(`/historias_clinicas/deportista/${deportistaId}`);
+    return data;
   },
 };
 
@@ -167,7 +193,7 @@ export const historiaClinicaService = historiasService;
 // ── Citas ────────────────────────────────────────────────────
 export const citasService = {
   async getAll() {
-    const { data } = await api.get<Cita[]>('/citas');
+    const { data } = await api.get<Cita[]>('/citas/');
     return data;
   },
   async getByDeportista(deportistaId: string) {
@@ -175,7 +201,7 @@ export const citasService = {
     return data;
   },
   async create(body: Omit<Cita, 'id' | 'created_at'>) {
-    const { data } = await api.post<Cita>('/citas', body);
+    const { data } = await api.post<Cita>('/citas/', body);
     return data;
   },
   async update(id: string, body: Partial<Cita>) {
