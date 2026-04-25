@@ -1,1027 +1,633 @@
+// ============================================================
+// VISTA HISTORIA CLÍNICA
+// Diseño: WAP Enterprise SAS — Sistema Médico INDERHUILA
+//
+// ESTRUCTURA PARA ESCALAR:
+//   1. TOKENS  — colores, radios, sombras. Editar aquí = cambia todo.
+//   2. ÁTOMOS  — Badge, InfoField, SectionCard, etc. Reutilizables.
+//   3. SECCIONES — cada sección es una función independiente.
+//   4. COMPONENTE PRINCIPAL — orquesta todo.
+// ============================================================
 import { useState, useEffect } from 'react';
-import { historiaClinicaService, documentosService } from '@/app/services/apiClient';
-import { toast } from 'sonner';
-import { ArrowLeft, Loader, Download, Mail, MessageCircle, Printer, X, CheckSquare, Square } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { toast } from 'sonner';
+import {
+  ArrowLeft, Download, Mail, MessageCircle, Printer,
+  FileText, CheckSquare, Square, X, Loader2,
+  User, Activity, Stethoscope, FlaskConical,
+  ClipboardList, ShieldCheck,
+} from 'lucide-react';
+import { historiaClinicaService } from '@/app/services/apiClient';
 
-// URL base de la API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// ── 1. TOKENS ────────────────────────────────────────────────
+const T = {
+  primary:      '#1F4788',
+  primaryLight: '#EEF3FB',
+  primaryMid:   '#3b82f6',
+  bg:           '#F5F7FA',
+  surface:      '#ffffff',
+  surfaceAlt:   '#f8fafc',
+  border:       '#e2e8f0',
+  borderLight:  '#f1f5f9',
+  textPrimary:  '#0f172a',
+  textSecondary:'#475569',
+  textMuted:    '#94a3b8',
+  success:      '#10b981',
+  successBg:    '#d1fae5',
+  successText:  '#065f46',
+  danger:       '#ef4444',
+  dangerBg:     '#fee2e2',
+  dangerText:   '#991b1b',
+  warning:      '#f59e0b',
+  warningBg:    '#fffbeb',
+  warningText:  '#92400e',
+  radius:       '12px',
+  radiusSm:     '8px',
+  shadow:       '0 1px 3px rgba(0,0,0,0.06)',
+  shadowMd:     '0 4px 16px rgba(31,71,136,0.08)',
+};
 
-interface VistaHistoriaClinicaProps {
-  historiaId: string;
-  onNavigate?: (view: string) => void;
+// ── Utilidades ────────────────────────────────────────────────
+const fmtFecha = (d?: string | null) =>
+  d ? format(new Date(d + 'T12:00:00'), 'd MMM yyyy', { locale: es }) : '—';
+const fmtFechaHora = (d?: string | null) =>
+  d ? format(new Date(d), 'd MMM yyyy HH:mm', { locale: es }) : '—';
+
+// ── 2. ÁTOMOS ────────────────────────────────────────────────
+function Badge({ label, color = T.primary }: { label: string; color?: string }) {
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20, background:`${color}18`, color }}>{label}</span>
+  );
 }
 
-// Definicion de las 9 secciones disponibles
-const SECCIONES_DISPONIBLES = [
-  { id: 'motivo_consulta', numero: 1, nombre: 'Motivo de Consulta y Enfermedad Actual' },
-  { id: 'antecedentes', numero: 2, nombre: 'Antecedentes Medicos' },
-  { id: 'revision_sistemas', numero: 3, nombre: 'Revision por Sistemas' },
-  { id: 'signos_vitales', numero: 4, nombre: 'Signos Vitales' },
-  { id: 'exploracion_fisica', numero: 5, nombre: 'Exploracion Fisica por Sistemas' },
-  { id: 'pruebas_complementarias', numero: 6, nombre: 'Pruebas Complementarias' },
-  { id: 'diagnosticos', numero: 7, nombre: 'Diagnosticos' },
-  { id: 'plan_tratamiento', numero: 8, nombre: 'Plan de Tratamiento' },
-  { id: 'remisiones', numero: 9, nombre: 'Remisiones a Especialistas' },
+function InfoField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p style={{ margin:'0 0 3px', fontSize:11, fontWeight:600, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</p>
+      <p style={{ margin:0, fontSize:14, color:T.textPrimary, fontWeight:500 }}>{value || '—'}</p>
+    </div>
+  );
+}
+
+function SectionCard({ numero, titulo, icon, children, accent = T.primary }:
+  { numero?: number; titulo: string; icon?: React.ReactNode; children: React.ReactNode; accent?: string }) {
+  return (
+    <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, overflow:'hidden', boxShadow:T.shadow }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 20px', borderBottom:`1px solid ${T.borderLight}`, background:T.surfaceAlt }}>
+        {icon && (
+          <div style={{ width:32, height:32, borderRadius:T.radiusSm, background:`${accent}15`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>{icon}</div>
+        )}
+        <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+          {numero && <span style={{ fontSize:11, fontWeight:700, color:T.textMuted }}>{numero}.</span>}
+          <h2 style={{ margin:0, fontSize:14, fontWeight:700, color:T.textPrimary }}>{titulo}</h2>
+        </div>
+      </div>
+      <div style={{ padding:'16px 20px' }}>{children}</div>
+    </div>
+  );
+}
+
+function Empty({ texto }: { texto: string }) {
+  return <p style={{ margin:0, fontSize:13, color:T.textMuted, fontStyle:'italic' }}>{texto}</p>;
+}
+
+function DataRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'10px 0', borderBottom:`1px solid ${T.borderLight}`, gap:16 }}>
+      <span style={{ fontSize:13, color:T.textSecondary, fontWeight:500, flexShrink:0 }}>{label}</span>
+      <span style={{ fontSize:13, color:T.textPrimary, textAlign:'right' }}>{value}</span>
+    </div>
+  );
+}
+
+function Item({ children, accent = T.primary }: { children: React.ReactNode; accent?: string }) {
+  return (
+    <div style={{ padding:'12px 14px', borderRadius:T.radiusSm, background:T.surfaceAlt, border:`1px solid ${T.borderLight}`, borderLeft:`3px solid ${accent}`, marginBottom:8 }}>{children}</div>
+  );
+}
+
+function SubTitle({ titulo }: { titulo: string }) {
+  return <p style={{ margin:'0 0 8px', fontSize:11, fontWeight:700, color:T.primary, textTransform:'uppercase', letterSpacing:'0.06em' }}>{titulo}</p>;
+}
+
+// ── 3. SECCIONES ─────────────────────────────────────────────
+
+function S1_MotivoConsulta({ motivo }: { motivo: any }) {
+  return (
+    <SectionCard numero={1} titulo="Motivo de Consulta y Enfermedad Actual" icon={<FileText size={16} />}>
+      {!motivo ? <Empty texto="No registrado" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {motivo.motivo_consulta && (
+            <div>
+              <SubTitle titulo="Motivo de consulta" />
+              <p style={{ margin:0, fontSize:14, color:T.textPrimary, lineHeight:1.6 }}>{motivo.motivo_consulta}</p>
+            </div>
+          )}
+          {motivo.enfermedad_actual && (
+            <div>
+              <SubTitle titulo="Enfermedad actual / Anamnesis" />
+              <p style={{ margin:0, fontSize:14, color:T.textPrimary, lineHeight:1.6 }}>{motivo.enfermedad_actual}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S2_Antecedentes({ ap, af, les, cir, alg, med, vac }: any) {
+  const total = ap.length + af.length + les.length + cir.length + alg.length + med.length + vac.length;
+  return (
+    <SectionCard numero={2} titulo="Antecedentes Médicos" icon={<User size={16} />}>
+      {total === 0 ? <Empty texto="Sin antecedentes registrados" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          {ap.length > 0 && <div><SubTitle titulo="Personales" />{ap.map((a: any, i: number) => (
+            <Item key={i}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{a.nombre_enfermedad}</p>{a.codigo_cie11 && <p style={{ margin:'2px 0 0', fontSize:11, color:T.textMuted }}>CIE-11: {a.codigo_cie11}</p>}{a.observaciones && <p style={{ margin:'4px 0 0', fontSize:13, color:T.textSecondary }}>{a.observaciones}</p>}</Item>
+          ))}</div>}
+          {af.length > 0 && <div><SubTitle titulo="Familiares" />{af.map((f: any, i: number) => (
+            <Item key={i}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{f.nombre_enfermedad}</p>{f.tipo_familiar && <Badge label={f.tipo_familiar} />}</div>{f.codigo_cie11 && <p style={{ margin:'2px 0 0', fontSize:11, color:T.textMuted }}>CIE-11: {f.codigo_cie11}</p>}</Item>
+          ))}</div>}
+          {alg.length > 0 && <div><SubTitle titulo="Alergias" />{alg.map((a: any, i: number) => (
+            <Item key={i} accent={T.danger}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{a.alergeno}</p>{a.severidad && <Badge label={a.severidad} color={T.danger} />}</div>{a.reaccion && <p style={{ margin:'4px 0 0', fontSize:13, color:T.textSecondary }}>Reacción: {a.reaccion}</p>}</Item>
+          ))}</div>}
+          {med.length > 0 && <div><SubTitle titulo="Medicaciones actuales" />{med.map((m: any, i: number) => (
+            <Item key={i}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{m.medicamento}</p>{(m.dosis||m.frecuencia) && <p style={{ margin:'2px 0 0', fontSize:12, color:T.textSecondary }}>{[m.dosis,m.frecuencia].filter(Boolean).join(' · ')}</p>}</Item>
+          ))}</div>}
+          {les.length > 0 && <div><SubTitle titulo="Lesiones deportivas" />{les.map((l: any, i: number) => (
+            <Item key={i}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{l.tipo_lesion}</p>{l.fecha_ultima_lesion && <p style={{ margin:'2px 0 0', fontSize:12, color:T.textMuted }}>Última: {fmtFecha(l.fecha_ultima_lesion)}</p>}{l.tratamiento && <p style={{ margin:'4px 0 0', fontSize:13, color:T.textSecondary }}>{l.tratamiento}</p>}</Item>
+          ))}</div>}
+          {cir.length > 0 && <div><SubTitle titulo="Cirugías previas" />{cir.map((c: any, i: number) => (
+            <Item key={i}><p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{c.tipo_cirugia}</p>{c.fecha_cirugia && <p style={{ margin:'2px 0 0', fontSize:12, color:T.textMuted }}>{fmtFecha(c.fecha_cirugia)}</p>}</Item>
+          ))}</div>}
+          {vac.length > 0 && <div><SubTitle titulo="Vacunas" />
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:8 }}>
+              {vac.map((v: any, i: number) => (
+                <div key={i} style={{ padding:'10px 12px', background:T.surfaceAlt, borderRadius:T.radiusSm, border:`1px solid ${T.border}` }}>
+                  <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{v.nombre_vacuna}</p>
+                  {v.fecha_administracion && <p style={{ margin:'2px 0 0', fontSize:11, color:T.textMuted }}>{fmtFecha(v.fecha_administracion)}</p>}
+                </div>
+              ))}
+            </div>
+          </div>}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S3_RevisionSistemas({ revision }: { revision: any[] }) {
+  const hallazgos = revision.filter((r: any) => r.estado && r.estado !== 'normal');
+  const normales  = revision.filter((r: any) => r.estado === 'normal');
+  return (
+    <SectionCard numero={3} titulo="Revisión por Sistemas" icon={<Activity size={16} />}>
+      {revision.length === 0 ? <Empty texto="Sin revisión por sistemas" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {hallazgos.length > 0 && <div>
+            <SubTitle titulo="Con hallazgos" />
+            {hallazgos.map((r: any, i: number) => (
+              <Item key={i} accent={T.warning}>
+                <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                  <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary, textTransform:'capitalize' }}>{String(r.sistema||'').replace(/_/g,' ')}</p>
+                  <Badge label={r.estado} color={T.warning} />
+                </div>
+                {r.observaciones && <p style={{ margin:'4px 0 0', fontSize:13, color:T.textSecondary }}>{r.observaciones}</p>}
+              </Item>
+            ))}
+          </div>}
+          {normales.length > 0 && <div>
+            <SubTitle titulo="Sin alteraciones" />
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {normales.map((r: any, i: number) => <Badge key={i} label={String(r.sistema||'').replace(/_/g,' ')} color={T.success} />)}
+            </div>
+          </div>}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S4_SignosVitales({ signos }: { signos: any[] }) {
+  const s = signos[0] || {};
+  const metricas = [
+    { label:'Frec. cardíaca',   valor:s.frecuencia_cardiaca,    unidad:'bpm'   },
+    { label:'Frec. respiratoria',valor:s.frecuencia_respiratoria,unidad:'rpm'  },
+    { label:'Presión arterial', valor:s.presion_arterial,       unidad:'mmHg'  },
+    { label:'Temperatura',      valor:s.temperatura,            unidad:'°C'    },
+    { label:'Sat. O₂',         valor:s.saturacion_oxigeno,     unidad:'%'     },
+    { label:'Peso',             valor:s.peso,                   unidad:'kg'    },
+    { label:'Estatura',         valor:s.estatura,               unidad:'cm'    },
+    { label:'IMC',              valor:s.imc,                    unidad:'kg/m²' },
+  ].filter(m => m.valor);
+  return (
+    <SectionCard numero={4} titulo="Signos Vitales y Antropometría" icon={<Activity size={16} />}>
+      {metricas.length === 0 ? <Empty texto="Sin signos vitales registrados" /> : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:10 }}>
+          {metricas.map((m,i) => (
+            <div key={i} style={{ padding:'12px 14px', borderRadius:T.radiusSm, background:T.surfaceAlt, border:`1px solid ${T.border}`, textAlign:'center' }}>
+              <p style={{ margin:'0 0 4px', fontSize:11, color:T.textMuted, fontWeight:500 }}>{m.label}</p>
+              <p style={{ margin:0, fontSize:20, fontWeight:700, color:T.primary }}>
+                {m.valor}<span style={{ fontSize:11, fontWeight:400, color:T.textMuted, marginLeft:3 }}>{m.unidad}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S5_Exploracion({ exploracion }: { exploracion: any }) {
+  if (!exploracion) return (
+    <SectionCard numero={5} titulo="Exploración Física por Sistemas" icon={<Stethoscope size={16} />}>
+      <Empty texto="Sin exploración física registrada" />
+    </SectionCard>
+  );
+  const sistemas = [
+    ['Cardiovascular', exploracion.cardiovascular],
+    ['Respiratorio', exploracion.respiratorio],
+    ['Digestivo', exploracion.digestivo],
+    ['Neurológico', exploracion.neurologico],
+    ['Musculoesquelético', exploracion.musculoesqueletico],
+    ['Genitourinario', exploracion.genitourinario],
+    ['Piel y Faneras', exploracion.piel_faneras],
+    ['Endocrino', exploracion.endocrino],
+    ['Cabeza y Cuello', exploracion.cabeza_cuello],
+    ['Extremidades', exploracion.extremidades],
+  ].filter(([,v]) => v);
+  return (
+    <SectionCard numero={5} titulo="Exploración Física por Sistemas" icon={<Stethoscope size={16} />}>
+      {sistemas.length === 0 ? <Empty texto="Sin hallazgos registrados" /> : (
+        <div>
+          {sistemas.map(([n,v],i) => <DataRow key={i} label={n as string} value={v as string} />)}
+          {exploracion.observaciones_generales && (
+            <div style={{ marginTop:12, padding:'12px 14px', background:T.primaryLight, borderRadius:T.radiusSm }}>
+              <p style={{ margin:'0 0 4px', fontSize:11, fontWeight:600, color:T.primary }}>Observaciones generales</p>
+              <p style={{ margin:0, fontSize:13, color:T.textPrimary }}>{exploracion.observaciones_generales}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S6_Pruebas({ pruebas }: { pruebas: any[] }) {
+  if (pruebas.length === 0) return null;
+  return (
+    <SectionCard numero={6} titulo="Pruebas Complementarias / Ayudas Diagnósticas" icon={<FlaskConical size={16} />}>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {pruebas.map((p:any,i:number) => (
+          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'12px 14px', borderRadius:T.radiusSm, background:T.surfaceAlt, border:`1px solid ${T.border}`, gap:12 }}>
+            <div style={{ flex:1 }}>
+              <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{p.nombre_prueba}</p>
+              {p.categoria && <p style={{ margin:'2px 0 0', fontSize:11, color:T.textMuted }}>{p.categoria}{p.codigo_cups?` · CUPS: ${p.codigo_cups}`:''}</p>}
+              {p.resultado && <p style={{ margin:'6px 0 0', fontSize:13, color:T.textSecondary }}>Resultado: {p.resultado}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function S7_Diagnosticos({ diagnosticos }: { diagnosticos: any[] }) {
+  const VIOLET = '#6366f1';
+  return (
+    <SectionCard numero={7} titulo="Diagnósticos" icon={<ClipboardList size={16} />} accent={VIOLET}>
+      {diagnosticos.length === 0 ? <Empty texto="Sin diagnósticos registrados" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {diagnosticos.map((d:any,i:number) => (
+            <div key={i} style={{ padding:'12px 14px', borderRadius:T.radiusSm, background:'#f5f3ff', border:'1px solid #e0e7ff', borderLeft:`3px solid ${VIOLET}` }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{d.nombre_enfermedad}</p>
+                {d.codigo_cie11 && <Badge label={`CIE-11: ${d.codigo_cie11}`} color={VIOLET} />}
+              </div>
+              {d.tipo_diagnostico && <p style={{ margin:'4px 0 0', fontSize:12, color:VIOLET }}>{d.tipo_diagnostico}</p>}
+              {d.observaciones && <p style={{ margin:'6px 0 0', fontSize:13, color:T.textSecondary }}>{d.observaciones}</p>}
+              {d.impresion_diagnostica && <p style={{ margin:'6px 0 0', fontSize:13, color:T.textSecondary, fontStyle:'italic' }}>Impresión: {d.impresion_diagnostica}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S8_PlanTratamiento({ planes, remisiones }: { planes: any[]; remisiones: any[] }) {
+  const TEAL = '#0f766e';
+  const p = planes[0] || {};
+  const tienePlan = p.indicaciones_medicas || p.recomendaciones_entrenamiento || p.plan_seguimiento;
+  return (
+    <SectionCard numero={8} titulo="Plan de Tratamiento" icon={<ClipboardList size={16} />} accent={TEAL}>
+      {!tienePlan && remisiones.length === 0 ? <Empty texto="Sin plan de tratamiento registrado" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {p.indicaciones_medicas && (
+            <div style={{ padding:'12px 14px', background:'#f0fdfa', borderRadius:T.radiusSm, border:'1px solid #ccfbf1' }}>
+              <SubTitle titulo="Indicaciones médicas" />
+              <p style={{ margin:0, fontSize:13, color:T.textPrimary, lineHeight:1.6 }}>{p.indicaciones_medicas}</p>
+            </div>
+          )}
+          {p.recomendaciones_entrenamiento && (
+            <div style={{ padding:'12px 14px', background:T.surfaceAlt, borderRadius:T.radiusSm, border:`1px solid ${T.border}` }}>
+              <SubTitle titulo="Recomendaciones de entrenamiento" />
+              <p style={{ margin:0, fontSize:13, color:T.textPrimary, lineHeight:1.6 }}>{p.recomendaciones_entrenamiento}</p>
+            </div>
+          )}
+          {p.plan_seguimiento && (
+            <div style={{ padding:'12px 14px', background:T.surfaceAlt, borderRadius:T.radiusSm, border:`1px solid ${T.border}` }}>
+              <SubTitle titulo="Plan de seguimiento" />
+              <p style={{ margin:0, fontSize:13, color:T.textPrimary, lineHeight:1.6 }}>{p.plan_seguimiento}</p>
+            </div>
+          )}
+          {remisiones.length > 0 && (
+            <div>
+              <SubTitle titulo="Remisiones a especialistas" />
+              {remisiones.map((r:any,i:number) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'10px 14px', borderRadius:T.radiusSm, background:T.surfaceAlt, border:`1px solid ${T.border}`, marginBottom:8, gap:12 }}>
+                  <div>
+                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{r.especialista}</p>
+                    {r.motivo && <p style={{ margin:'2px 0 0', fontSize:13, color:T.textSecondary }}>{r.motivo}</p>}
+                    {r.fecha_remision && <p style={{ margin:'4px 0 0', fontSize:11, color:T.textMuted }}>{fmtFecha(r.fecha_remision)}</p>}
+                  </div>
+                  {r.prioridad && <Badge label={r.prioridad} color={r.prioridad==='urgente'?T.danger:r.prioridad==='prioritaria'?T.warning:T.primary} />}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function S9_Aptitud({ aptitud }: { aptitud: any }) {
+  const esApto = aptitud?.resultado === 'apto';
+  return (
+    <SectionCard numero={9} titulo="Aptitud Médica" icon={<ShieldCheck size={16} />} accent={aptitud?.resultado ? (esApto ? T.success : T.danger) : T.primary}>
+      {!aptitud?.resultado ? <Empty texto="No se ha registrado declaración de aptitud médica" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:18, padding:'20px 24px', borderRadius:T.radius, background:esApto?T.successBg:T.dangerBg, border:`2px solid ${esApto?T.success:T.danger}` }}>
+            <div style={{ width:60, height:60, borderRadius:'50%', background:esApto?T.success:T.danger, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:28, fontWeight:900, flexShrink:0 }}>
+              {esApto ? '✓' : '✗'}
+            </div>
+            <div>
+              <p style={{ margin:0, fontSize:24, fontWeight:900, color:esApto?T.successText:T.dangerText, letterSpacing:'0.05em' }}>
+                {esApto ? 'APTO' : 'NO APTO'}
+              </p>
+              {aptitud.tipo_aptitud && <p style={{ margin:'4px 0 0', fontSize:13, color:esApto?T.successText:T.dangerText }}>{aptitud.tipo_aptitud}</p>}
+            </div>
+          </div>
+          {aptitud.observaciones && (
+            <div style={{ padding:'12px 14px', background:T.surfaceAlt, borderRadius:T.radiusSm, border:`1px solid ${T.border}` }}>
+              <SubTitle titulo="Observaciones" />
+              <p style={{ margin:0, fontSize:13, color:T.textPrimary, lineHeight:1.6 }}>{aptitud.observaciones}</p>
+            </div>
+          )}
+          {aptitud.restricciones && (
+            <div style={{ padding:'12px 14px', background:T.warningBg, borderRadius:T.radiusSm, border:'1px solid #fde68a' }}>
+              <SubTitle titulo="Restricciones" />
+              <p style={{ margin:0, fontSize:13, color:T.warningText, lineHeight:1.6 }}>{aptitud.restricciones}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ── 4. COMPONENTE PRINCIPAL ───────────────────────────────────
+const SECCIONES = [
+  { id:'motivo_consulta',         numero:1, nombre:'Motivo de Consulta'         },
+  { id:'antecedentes',            numero:2, nombre:'Antecedentes Médicos'       },
+  { id:'revision_sistemas',       numero:3, nombre:'Revisión por Sistemas'      },
+  { id:'signos_vitales',          numero:4, nombre:'Signos Vitales'             },
+  { id:'exploracion_fisica',      numero:5, nombre:'Exploración Física'         },
+  { id:'pruebas_complementarias', numero:6, nombre:'Pruebas Complementarias'    },
+  { id:'diagnosticos',            numero:7, nombre:'Diagnósticos'               },
+  { id:'plan_tratamiento',        numero:8, nombre:'Plan de Tratamiento'        },
+  { id:'aptitud',                 numero:9, nombre:'Aptitud Médica'             },
 ];
 
-type AccionTipo = 'pdf' | 'email' | 'whatsapp' | 'imprimir' | null;
+type Accion = 'pdf' | 'email' | 'whatsapp' | 'imprimir' | null;
 
-export function VistaHistoriaClinica({ historiaId, onNavigate }: VistaHistoriaClinicaProps) {
-  const [historia, setHistoria] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+interface Props { historiaId: string; onNavigate?: (view: string) => void; }
 
-  // Estado del modal de seleccion de secciones
-  const [mostrarModalSecciones, setMostrarModalSecciones] = useState(false);
-  const [seccionesSeleccionadas, setSeccionesSeleccionadas] = useState<string[]>(
-    SECCIONES_DISPONIBLES.map(s => s.id)
-  );
-  const [accionPendiente, setAccionPendiente] = useState<AccionTipo>(null);
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
-  useEffect(() => {
-    cargarHistoria();
-  }, [historiaId]);
+export function VistaHistoriaClinica({ historiaId, onNavigate }: Props) {
+  const navigate = useNavigate();
+  const [historia,       setHistoria]       = useState<any>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [downloading,    setDownloading]    = useState(false);
+  const [sendingEmail,   setSendingEmail]   = useState(false);
+  const [sendingWA,      setSendingWA]      = useState(false);
+  const [modal,          setModal]          = useState(false);
+  const [secciones,      setSecciones]      = useState<string[]>(SECCIONES.map(s => s.id));
+  const [accion,         setAccion]         = useState<Accion>(null);
 
-  const cargarHistoria = async () => {
+  useEffect(() => { cargar(); }, [historiaId]);
+
+  const headers = () => {
+    const token = localStorage.getItem('auth_token');
+    return { 'ngrok-skip-browser-warning': 'true', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  };
+
+  const cargar = async () => {
     try {
-      setIsLoading(true);
-      var response = await fetch(API_BASE_URL + "/documentos/" + historiaId + "/datos-completos", {
-        headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error("Error al cargar historia clinica");
-      }
-
-      var data = await response.json();
-      setHistoria(data);
-    } catch (error) {
-      console.error("Error cargando historia:", error);
-      try {
-        var response2 = await historiaClinicaService.getById(historiaId);
-        setHistoria(response2);
-      } catch (fallbackError) {
-        toast.error("Error cargando historia clinica");
-        console.error(fallbackError);
-      }
-    } finally {
-      setIsLoading(false);
-    }
+      setLoading(true);
+      const res = await fetch(`${API}/documentos/${historiaId}/datos-completos`, { headers: headers() });
+      if (!res.ok) throw new Error();
+      setHistoria(await res.json());
+    } catch {
+      try { setHistoria(await historiaClinicaService.getById(historiaId)); }
+      catch { toast.error('Error cargando historia clínica'); }
+    } finally { setLoading(false); }
   };
 
-  // =========================================================================
-  // MODAL: Abrir con la accion seleccionada
-  // =========================================================================
-  const abrirSelectorSecciones = (accion: AccionTipo) => {
-    setAccionPendiente(accion);
-    setSeccionesSeleccionadas(SECCIONES_DISPONIBLES.map(s => s.id));
-    setMostrarModalSecciones(true);
-  };
+  const seccionesParam = () => secciones.length === SECCIONES.length ? '' : `secciones=${secciones.join(',')}`;
 
-  const toggleSeccion = (id: string) => {
-    setSeccionesSeleccionadas(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
-  };
-
-  const seleccionarTodas = () => {
-    setSeccionesSeleccionadas(SECCIONES_DISPONIBLES.map(s => s.id));
-  };
-
-  const deseleccionarTodas = () => {
-    setSeccionesSeleccionadas([]);
-  };
-
-  const confirmarAccion = () => {
-    if (seccionesSeleccionadas.length === 0) {
-      toast.error("Debe seleccionar al menos una seccion");
-      return;
-    }
-    setMostrarModalSecciones(false);
-
-    switch (accionPendiente) {
-      case 'pdf':
-        ejecutarDescargarPDF();
-        break;
-      case 'email':
-        ejecutarEnviarEmail();
-        break;
-      case 'whatsapp':
-        ejecutarEnviarWhatsApp();
-        break;
-      case 'imprimir':
-        ejecutarImprimir();
-        break;
-    }
-    setAccionPendiente(null);
-  };
-
-  // Construir query string con secciones seleccionadas
-  const buildSeccionesParam = () => {
-    if (seccionesSeleccionadas.length === SECCIONES_DISPONIBLES.length) {
-      return "";
-    }
-    return "secciones=" + seccionesSeleccionadas.join(",");
-  };
-
-  // =========================================================================
-  // ACCIONES (se ejecutan DESPUES de confirmar secciones)
-  // =========================================================================
-
-  const ejecutarDescargarPDF = async () => {
+  const ejecutarPDF = async () => {
     try {
-      setIsDownloading(true);
-      var seccionesParam = buildSeccionesParam();
-      var url = API_BASE_URL + "/documentos/" + historiaId + "/historia-clinica-pdf";
-      if (seccionesParam) {
-        url = url + "?" + seccionesParam;
-      }
-
-      var response = await fetch(url, {
-        headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error("Error al descargar PDF");
-      }
-
-      var blob = await response.blob();
-      var blobUrl = window.URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = "historia_clinica_" + (historia?.deportista?.numero_documento || historiaId) + ".pdf";
-      document.body.appendChild(a);
+      setDownloading(true);
+      const p = seccionesParam();
+      const res = await fetch(`${API}/documentos/${historiaId}/pdf${p ? `?${p}` : ''}`, { headers: headers() });
+      if (!res.ok) throw new Error();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `historia_${historiaId}.pdf`;
       a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(blobUrl);
-
-      toast.success("Historia clinica descargada correctamente");
-    } catch (error) {
-      console.error("Error descargando PDF:", error);
-      toast.error("Error al descargar el PDF");
-    } finally {
-      setIsDownloading(false);
-    }
+      URL.revokeObjectURL(a.href);
+    } catch { toast.error('Error al descargar PDF'); }
+    finally { setDownloading(false); }
   };
 
-  const ejecutarEnviarEmail = async () => {
-    var deportista = historia?.deportista || {};
-    var email = deportista.email;
-
-    if (!email) {
-      toast.error("El deportista no tiene correo electronico registrado");
-      return;
-    }
-
+  const ejecutarEmail = async () => {
+    const email = historia?.deportista?.email;
+    if (!email) { toast.error('El deportista no tiene correo registrado'); return; }
     try {
-      setIsSendingEmail(true);
-      toast.loading("Enviando correo con PDF adjunto...");
-
-      var seccionesParam = buildSeccionesParam();
-      var urlEmail = API_BASE_URL + "/documentos/" + historiaId + "/enviar-email?email_destino=" + encodeURIComponent(email);
-      if (seccionesParam) {
-        urlEmail = urlEmail + "&" + seccionesParam;
-      }
-
-      var response = await fetch(urlEmail, {
-        method: "POST",
-        headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
-      });
-
-      var data = await response.json();
-      toast.dismiss();
-
-      if (response.ok && data.success) {
-        toast.success("Correo enviado exitosamente a " + email);
-      } else {
-        if (response.status === 503) {
-          toast.info("Abriendo cliente de correo...");
-          abrirMailtoConEnlace(email, deportista);
-        } else {
-          toast.error(data.detail || "Error al enviar el correo");
-        }
-      }
-    } catch (error) {
-      console.error("Error enviando email:", error);
-      toast.dismiss();
-      var dep = historia?.deportista || {};
-      abrirMailtoConEnlace(dep.email, dep);
-    } finally {
-      setIsSendingEmail(false);
-    }
+      setSendingEmail(true);
+      const p = seccionesParam();
+      const res = await fetch(`${API}/documentos/${historiaId}/enviar-email?email_destino=${encodeURIComponent(email)}${p ? `&${p}` : ''}`, { method: 'POST', headers: headers() });
+      if (!res.ok) throw new Error();
+      toast.success('Correo enviado');
+    } catch { toast.error('Error al enviar correo'); }
+    finally { setSendingEmail(false); }
   };
 
-  const abrirMailtoConEnlace = (email: string, deportista: any) => {
-    var subject = encodeURIComponent("Historia Clinica - " + deportista.nombres + " " + deportista.apellidos);
-    var pdfUrl = API_BASE_URL + "/documentos/" + historiaId + "/historia-clinica-pdf";
-    var fechaApertura = historia.fecha_apertura
-      ? format(new Date(historia.fecha_apertura + "T12:00:00"), "d MMM yyyy", { locale: es })
-      : "N/A";
-    var body = encodeURIComponent(
-      "Estimado(a) " + deportista.nombres + " " + deportista.apellidos + ",\n\n" +
-      "Puede descargar su historia clinica deportiva desde el siguiente enlace:\n\n" +
-      pdfUrl + "\n\n" +
-      "Datos de la historia:\n" +
-      "- Documento: " + deportista.numero_documento + "\n" +
-      "- Fecha de apertura: " + fechaApertura + "\n" +
-      "- ID Historia: " + historia.id + "\n\n" +
-      "Atentamente,\n" +
-      "INDERHUILA - Instituto Departamental de Recreacion y Deportes del Huila"
-    );
-
-    window.open("mailto:" + email + "?subject=" + subject + "&body=" + body, "_blank");
-    toast.info("Abriendo cliente de correo...");
-  };
-
-  const ejecutarEnviarWhatsApp = async () => {
-    var deportista = historia?.deportista || {};
-    var telefono = deportista.telefono || deportista.celular;
-
-    if (!telefono) {
-      toast.error("El deportista no tiene numero de telefono registrado");
-      return;
-    }
-
-    telefono = telefono.replace(/\D/g, "");
-    if (telefono.length === 10) {
-      telefono = "57" + telefono;
-    }
-
+  const ejecutarWA = async () => {
     try {
-      setIsSendingWhatsApp(true);
-      toast.loading("Generando enlace seguro...");
-
-      var seccionesParam = buildSeccionesParam();
-      var urlToken = API_BASE_URL + "/descarga-segura/generar-token/" + historiaId;
-      if (seccionesParam) {
-        urlToken = urlToken + "?" + seccionesParam;
-      }
-
-      var response = await fetch(urlToken, {
-        method: "POST",
-        headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error("Error al generar enlace");
-      }
-
-      var data = await response.json();
-      toast.dismiss();
-
-      if (data.success) {
-        var mensaje = encodeURIComponent(
-          "*INDERHUILA - Historia Clinica Deportiva*\n\n" +
-          "Hola " + deportista.nombres + ",\n\n" +
-          "Tu historia clinica esta lista para descargar.\n\n" +
-          "Haz clic aqui para descargar:\n" +
-          data.url + "\n\n" +
-          "Ingresa tu cedula: " + deportista.numero_documento + "\n\n" +
-          "El enlace expira en 2 horas."
-        );
-
-        window.open("https://wa.me/" + telefono + "?text=" + mensaje, "_blank");
-        toast.success("Se abrira WhatsApp con el enlace");
-      } else {
-        throw new Error(data.mensaje || "Error al generar enlace");
-      }
-
-    } catch (error) {
-      console.error("Error preparando WhatsApp:", error);
-      toast.dismiss();
-      toast.error("Error al generar el enlace seguro");
-    } finally {
-      setIsSendingWhatsApp(false);
-    }
+      setSendingWA(true);
+      const p = seccionesParam();
+      const res = await fetch(`${API}/documentos/${historiaId}/generar-pdf${p ? `?${p}` : ''}`, { headers: headers() });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.url_descarga) window.open(data.url_descarga, '_blank');
+    } catch { toast.error('Error al generar enlace'); }
+    finally { setSendingWA(false); }
   };
 
-  const ejecutarImprimir = () => {
-    // Agregar clase CSS para ocultar secciones no seleccionadas al imprimir
-    var seccionesOcultas = SECCIONES_DISPONIBLES
-      .filter(s => !seccionesSeleccionadas.includes(s.id))
-      .map(s => s.id);
+  const abrirModal = (a: Accion) => { setAccion(a); setModal(true); };
 
-    // Crear hoja de estilos temporal para impresion
-    var style = document.createElement('style');
-    style.id = 'print-sections-filter';
-    style.textContent = seccionesOcultas
-      .map(id => '[data-seccion="' + id + '"] { display: none !important; }')
-      .join('\n');
-    document.head.appendChild(style);
-
-    // Imprimir y luego limpiar
-    setTimeout(function() {
-      window.print();
-      setTimeout(function() {
-        var styleEl = document.getElementById('print-sections-filter');
-        if (styleEl) styleEl.remove();
-      }, 500);
-    }, 100);
+  const confirmar = () => {
+    setModal(false);
+    if (accion === 'pdf') ejecutarPDF();
+    else if (accion === 'email') ejecutarEmail();
+    else if (accion === 'whatsapp') ejecutarWA();
+    else if (accion === 'imprimir') window.print();
+    setAccion(null);
   };
 
-  // =========================================================================
-  // RENDERIZADO
-  // =========================================================================
+  const volver = () => onNavigate ? onNavigate('historia') : navigate('/historia');
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader className="w-8 h-8 text-blue-600 animate-spin" />
-          <p className="text-gray-600">Cargando historia clinica...</p>
-        </div>
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', flexDirection:'column', gap:12 }}>
+      <Loader2 size={28} style={{ color:T.primary, animation:'spin 0.8s linear infinite' }} />
+      <p style={{ margin:0, fontSize:13, color:T.textMuted }}>Cargando historia clínica...</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if (!historia) return (
+    <div style={{ padding:24 }}>
+      <button onClick={volver} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', color:T.primary, fontSize:13, fontWeight:600, padding:0 }}>
+        <ArrowLeft size={16} /> Volver
+      </button>
+      <div style={{ marginTop:16, padding:16, background:T.dangerBg, borderRadius:T.radiusSm, color:T.dangerText, fontSize:13 }}>
+        Historia clínica no encontrada
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!historia) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={() => onNavigate?.("historias-clinicas")}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-6"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Volver
-          </button>
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            Historia clinica no encontrada
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const dep = historia.deportista || {};
+  const ap  = historia.antecedentes_personales     || [];
+  const af  = historia.antecedentes_familiares     || [];
+  const les = historia.lesiones_deportivas         || [];
+  const cir = historia.cirugias_previas            || [];
+  const alg = historia.alergias                   || [];
+  const med = historia.medicaciones               || [];
+  const vac = historia.vacunas_administradas      || [];
+  const rev = historia.revision_sistemas          || [];
+  const sig = historia.signos_vitales             || [];
+  const pru = historia.pruebas_complementarias    || [];
+  const dx  = historia.diagnosticos              || [];
+  const pla = Array.isArray(historia.plan_tratamiento) ? historia.plan_tratamiento : (historia.plan_tratamiento ? [historia.plan_tratamiento] : []);
+  const rem = historia.remisiones_especialistas   || [];
+  const apt = historia.aptitud_medica             || null;
+  const mot = historia.motivo_consulta_enfermedad || null;
+  const exp = historia.exploracion_fisica_sistemas || null;
 
-  var deportista = historia.deportista || {};
-  var antecedentes = historia.antecedentes_personales || [];
-  var antecedentes_familiares = historia.antecedentes_familiares || [];
-  var lesiones = historia.lesiones_deportivas || [];
-  var cirugias = historia.cirugias_previas || [];
-  var alergias = historia.alergias || [];
-  var medicaciones = historia.medicaciones || [];
-  var vacunas = historia.vacunas_administradas || [];
-  var revision_sistemas = historia.revision_sistemas || [];
-  var signos_vitales = historia.signos_vitales || [];
-  var pruebas = historia.pruebas_complementarias || [];
-  var diagnosticos = historia.diagnosticos || [];
-  var plan_tratamiento = Array.isArray(historia.plan_tratamiento) ? historia.plan_tratamiento : (historia.plan_tratamiento ? [historia.plan_tratamiento] : []);
-  var remisiones = historia.remisiones_especialistas || [];
-  var motivo_consulta_enfermedad = historia.motivo_consulta_enfermedad || null;
-  var exploracion_fisica = historia.exploracion_fisica_sistemas || null;
+  const BTNS = [
+    { a:'pdf'      as Accion, label:'PDF',      icon:<Download size={14} />,      color:'#dc2626', loading:downloading  },
+    { a:'email'    as Accion, label:'Email',    icon:<Mail size={14} />,          color:'#2563eb', loading:sendingEmail },
+    { a:'whatsapp' as Accion, label:'WhatsApp', icon:<MessageCircle size={14} />, color:'#16a34a', loading:sendingWA    },
+    { a:'imprimir' as Accion, label:'Imprimir', icon:<Printer size={14} />,       color:'#475569', loading:false        },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 print:p-0 print:bg-white">
-      <div className="max-w-5xl mx-auto">
-        {/* ENCABEZADO */}
-        <div className="mb-6 print:hidden">
-          <button
-            onClick={() => onNavigate?.("historias-clinicas")}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-4"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Volver al listado
-          </button>
+    <div style={{ display:'flex', flexDirection:'column', gap:20, maxWidth:900, margin:'0 auto' }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @media print{.np{display:none!important}}`}</style>
+
+      {/* Volver */}
+      <button onClick={volver} className="np" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', color:T.primary, fontSize:13, fontWeight:600, padding:0, width:'fit-content' }}>
+        <ArrowLeft size={16} /> Volver al listado
+      </button>
+
+      {/* HEADER */}
+      <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, boxShadow:T.shadowMd, overflow:'hidden' }}>
+        <div style={{ background:`linear-gradient(135deg,${T.primary} 0%,${T.primaryMid} 100%)`, padding:'20px 24px' }}>
+          <h1 style={{ margin:0, fontSize:20, fontWeight:800, color:'#fff' }}>
+            Historia Clínica — {dep.nombres} {dep.apellidos}
+          </h1>
+          <p style={{ margin:'4px 0 0', fontSize:12, color:'rgba(255,255,255,0.75)' }}>
+            INDERHUILA — Instituto Departamental de Recreación y Deportes del Huila
+          </p>
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6 mb-6 print:shadow-none print:rounded-none">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Historia Clinica - {deportista.nombres} {deportista.apellidos}
-              </h1>
-              <p className="text-gray-600">INDERHUILA - Instituto Departamental de Recreacion y Deportes del Huila</p>
-            </div>
-
-            {/* BOTONES DE ACCION - Ahora abren el modal */}
-            <div className="flex flex-wrap gap-2 print:hidden">
-              <button
-                onClick={() => abrirSelectorSecciones('pdf')}
-                disabled={isDownloading}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-400"
-                title="Descargar PDF"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">{isDownloading ? "Descargando..." : "PDF"}</span>
-              </button>
-
-              <button
-                onClick={() => abrirSelectorSecciones('email')}
-                disabled={isSendingEmail}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-                title="Enviar por Email con PDF adjunto"
-              >
-                <Mail className="w-4 h-4" />
-                <span className="hidden sm:inline">{isSendingEmail ? "Enviando..." : "Email"}</span>
-              </button>
-
-              <button
-                onClick={() => abrirSelectorSecciones('whatsapp')}
-                disabled={isSendingWhatsApp}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400"
-                title="Enviar por WhatsApp con enlace seguro"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">{isSendingWhatsApp ? "Generando..." : "WhatsApp"}</span>
-              </button>
-
-              <button
-                onClick={() => abrirSelectorSecciones('imprimir')}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                title="Imprimir"
-              >
-                <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">Imprimir</span>
-              </button>
-            </div>
-          </div>
-
-          {/* DATOS GENERALES */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t pt-4">
-            <div>
-              <p className="text-gray-600">Documento</p>
-              <p className="font-semibold text-gray-900">{deportista.numero_documento}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Fecha Nacimiento</p>
-              <p className="font-semibold text-gray-900">
-                {deportista.fecha_nacimiento ? format(new Date(deportista.fecha_nacimiento + "T12:00:00"), "d MMM yyyy", { locale: es }) : "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-600">Telefono</p>
-              <p className="font-semibold text-gray-900">{deportista.telefono || deportista.celular || "-"}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Email</p>
-              <p className="font-semibold text-gray-900 text-xs break-all">{deportista.email || "-"}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Fecha Apertura</p>
-              <p className="font-semibold text-gray-900">
-                {historia.fecha_apertura ? format(new Date(historia.fecha_apertura + "T12:00:00"), "d MMM yyyy", { locale: es }) : "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-600">Fecha Creacion</p>
-              <p className="font-semibold text-gray-900">
-                {historia.created_at ? format(new Date(historia.created_at), "d MMM yyyy HH:mm", { locale: es }) : "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-600">ID Historia</p>
-              <p className="font-semibold text-gray-900 text-xs">{historia.id.slice(0, 8)}...</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Deporte</p>
-              <p className="font-semibold text-gray-900">{deportista.deporte || deportista.disciplina || "-"}</p>
-            </div>
+        <div style={{ padding:'16px 24px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:16 }}>
+            <InfoField label="Documento"       value={dep.numero_documento} />
+            <InfoField label="Fecha nacimiento" value={fmtFecha(dep.fecha_nacimiento)} />
+            <InfoField label="Teléfono"         value={dep.telefono} />
+            <InfoField label="Email"            value={dep.email} />
+            <InfoField label="Fecha apertura"  value={fmtFecha(historia.fecha_apertura)} />
+            <InfoField label="Fecha creación"  value={fmtFechaHora(historia.created_at)} />
+            <InfoField label="Deporte"         value={dep.tipo_deporte} />
+            <InfoField label="ID Historia"     value={historia.id ? `${historia.id.slice(0,8)}...` : undefined} />
           </div>
         </div>
-
-        {/* =============================================================== */}
-        {/* SECCIONES - Cada una con data-seccion para filtro de impresion  */}
-        {/* =============================================================== */}
-        <div className="space-y-6">
-          {/* 1. MOTIVO DE CONSULTA Y ENFERMEDAD ACTUAL */}
-          {motivo_consulta_enfermedad && (
-            <div data-seccion="motivo_consulta" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">1. Motivo de Consulta y Enfermedad Actual</h2>
-              <div className="border-l-4 border-sky-500 pl-4 py-2 space-y-3">
-                {motivo_consulta_enfermedad.motivo_consulta && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Motivo de Consulta</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.motivo_consulta}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.sintomas_principales && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Sintomas Principales</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.sintomas_principales}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.duracion_sintomas && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Duracion de Sintomas</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.duracion_sintomas}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.inicio_enfermedad && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Inicio de la Enfermedad</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.inicio_enfermedad}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.evolucion && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Evolucion</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.evolucion}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.factor_desencadenante && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Factor Desencadenante</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.factor_desencadenante}</p>
-                  </div>
-                )}
-                {motivo_consulta_enfermedad.medicamentos_previos && (
-                  <div>
-                    <p className="font-semibold text-gray-900">Medicamentos Previos</p>
-                    <p className="text-gray-600">{motivo_consulta_enfermedad.medicamentos_previos}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 2. ANTECEDENTES MEDICOS (agrupa personales, familiares, lesiones, cirugias, alergias, medicaciones, vacunas) */}
-          {(antecedentes.length > 0 || antecedentes_familiares.length > 0 || lesiones.length > 0 || cirugias.length > 0 || alergias.length > 0 || medicaciones.length > 0 || vacunas.length > 0) && (
-            <div data-seccion="antecedentes">
-              {antecedentes.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">2. Antecedentes Personales</h2>
-                  <div className="space-y-3">
-                    {antecedentes.map((a: any, i: number) => (
-                      <div key={i} className="border-l-4 border-blue-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{a.nombre_enfermedad}</p>
-                        {a.codigo_cie11 && <p className="text-sm text-gray-600">CIE-11: {a.codigo_cie11}</p>}
-                        {a.observaciones && <p className="text-sm text-gray-600">Observaciones: {a.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {antecedentes_familiares.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Antecedentes Familiares</h2>
-                  <div className="space-y-3">
-                    {antecedentes_familiares.map((a: any, i: number) => (
-                      <div key={i} className="border-l-4 border-purple-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{a.nombre_enfermedad}</p>
-                        {a.tipo_familiar && <p className="text-sm text-gray-600">Relacion: {a.tipo_familiar}</p>}
-                        {a.codigo_cie11 && <p className="text-sm text-gray-600">CIE-11: {a.codigo_cie11}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {lesiones.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Lesiones Deportivas</h2>
-                  <div className="space-y-3">
-                    {lesiones.map((l: any, i: number) => (
-                      <div key={i} className="border-l-4 border-red-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{l.descripcion || l.tipo_lesion}</p>
-                        {l.fecha_ultima_lesion && <p className="text-sm text-gray-600">Fecha: {format(new Date(l.fecha_ultima_lesion + "T12:00:00"), "d MMM yyyy", { locale: es })}</p>}
-                        {l.observaciones && <p className="text-sm text-gray-600">Observaciones: {l.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {cirugias.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Cirugias Previas</h2>
-                  <div className="space-y-3">
-                    {cirugias.map((c: any, i: number) => (
-                      <div key={i} className="border-l-4 border-orange-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{c.tipo_cirugia}</p>
-                        {c.fecha_cirugia && <p className="text-sm text-gray-600">Fecha: {format(new Date(c.fecha_cirugia + "T12:00:00"), "d MMM yyyy", { locale: es })}</p>}
-                        {c.observaciones && <p className="text-sm text-gray-600">Observaciones: {c.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {alergias.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Alergias</h2>
-                  <div className="space-y-3">
-                    {alergias.map((a: any, i: number) => (
-                      <div key={i} className="border-l-4 border-yellow-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{a.tipo_alergia}</p>
-                        {a.observaciones && <p className="text-sm text-gray-600">Observaciones: {a.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {medicaciones.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Medicaciones Actuales</h2>
-                  <div className="space-y-3">
-                    {medicaciones.map((m: any, i: number) => (
-                      <div key={i} className="border-l-4 border-green-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{m.nombre_medicacion}</p>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm mt-2">
-                          {m.dosis && <p className="text-gray-600">Dosis: {m.dosis}</p>}
-                          {m.frecuencia && <p className="text-gray-600">Frecuencia: {m.frecuencia}</p>}
-                        </div>
-                        {m.observaciones && <p className="text-sm text-gray-600 mt-2">Observaciones: {m.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {vacunas.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6 mb-4 print:shadow-none print:border print:border-gray-300">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">Vacunas Administradas</h2>
-                  <div className="space-y-3">
-                    {vacunas.map((v: any, i: number) => (
-                      <div key={i} className="border-l-4 border-indigo-500 pl-4 py-2">
-                        <p className="font-semibold text-gray-900">{v.nombre_vacuna}</p>
-                        {v.fecha_administracion && <p className="text-sm text-gray-600">Fecha: {format(new Date(v.fecha_administracion + "T12:00:00"), "d MMM yyyy", { locale: es })}</p>}
-                        {v.observaciones && <p className="text-sm text-gray-600">Observaciones: {v.observaciones}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 3. REVISION POR SISTEMAS */}
-          {revision_sistemas.length > 0 && (
-            <div data-seccion="revision_sistemas" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">3. Revision por Sistemas</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {revision_sistemas.map((r: any, i: number) => (
-                  <div key={i} className="border-l-4 border-slate-500 pl-4 py-2">
-                    <p className="font-semibold text-gray-900">{r.sistema_nombre}</p>
-                    <p className={"text-sm " + (r.estado === "normal" || r.estado === "Normal" ? "text-green-600" : "text-red-600")}>
-                      Estado: {r.estado}
-                    </p>
-                    {r.observaciones && <p className="text-sm text-gray-600">Obs: {r.observaciones}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 4. SIGNOS VITALES */}
-          {signos_vitales.length > 0 && (
-            <div data-seccion="signos_vitales" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">4. Signos Vitales</h2>
-              <div className="space-y-3">
-                {signos_vitales.map((s: any, i: number) => (
-                  <div key={i} className="border-l-4 border-cyan-500 pl-4 py-2">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      {s.estatura_cm && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Estatura</p>
-                          <p className="font-semibold">{s.estatura_cm} cm</p>
-                        </div>
-                      )}
-                      {s.peso_kg && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Peso</p>
-                          <p className="font-semibold">{s.peso_kg} kg</p>
-                        </div>
-                      )}
-                      {s.imc && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">IMC</p>
-                          <p className="font-semibold">{s.imc}</p>
-                        </div>
-                      )}
-                      {s.frecuencia_cardiaca_lpm && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Frec. Cardiaca</p>
-                          <p className="font-semibold">{s.frecuencia_cardiaca_lpm} lpm</p>
-                        </div>
-                      )}
-                      {(s.presion_arterial_sistolica || s.presion_arterial_diastolica) && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Presion Arterial</p>
-                          <p className="font-semibold">{s.presion_arterial_sistolica}/{s.presion_arterial_diastolica} mmHg</p>
-                        </div>
-                      )}
-                      {s.frecuencia_respiratoria_rpm && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Frec. Respiratoria</p>
-                          <p className="font-semibold">{s.frecuencia_respiratoria_rpm} rpm</p>
-                        </div>
-                      )}
-                      {s.temperatura_celsius && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Temperatura</p>
-                          <p className="font-semibold">{s.temperatura_celsius} C</p>
-                        </div>
-                      )}
-                      {s.saturacion_oxigeno_percent && (
-                        <div className="bg-gray-50 p-2 rounded">
-                          <p className="text-gray-600">Saturacion O2</p>
-                          <p className="font-semibold">{s.saturacion_oxigeno_percent}%</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 5. EXPLORACION FISICA POR SISTEMAS */}
-          {exploracion_fisica && (
-            <div data-seccion="exploracion_fisica" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">5. Exploracion Fisica por Sistemas</h2>
-              <div className="border-l-4 border-emerald-500 pl-4 py-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {exploracion_fisica.sistema_cardiovascular && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Cardiovascular</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_cardiovascular}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_respiratorio && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Respiratorio</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_respiratorio}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_digestivo && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Digestivo</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_digestivo}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_neurologico && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Neurologico</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_neurologico}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_genitourinario && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Genitourinario</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_genitourinario}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_musculoesqueletico && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Musculoesqueletico</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_musculoesqueletico}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_integumentario && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Integumentario (Piel)</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_integumentario}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.sistema_endocrino && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Sistema Endocrino</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.sistema_endocrino}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.cabeza_cuello && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Cabeza y Cuello</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.cabeza_cuello}</p>
-                    </div>
-                  )}
-                  {exploracion_fisica.extremidades && (
-                    <div>
-                      <p className="font-semibold text-gray-900">Extremidades</p>
-                      <p className="text-gray-600 text-sm">{exploracion_fisica.extremidades}</p>
-                    </div>
-                  )}
-                </div>
-                {exploracion_fisica.observaciones_generales && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <p className="font-semibold text-gray-900">Observaciones Generales</p>
-                    <p className="text-gray-600 text-sm">{exploracion_fisica.observaciones_generales}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 6. PRUEBAS COMPLEMENTARIAS */}
-          {pruebas.length > 0 && (
-            <div data-seccion="pruebas_complementarias" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">6. Pruebas Complementarias / Ayudas Diagnosticas</h2>
-              <div className="space-y-3">
-                {pruebas.map((p: any, i: number) => (
-                  <div key={i} className="border-l-4 border-lime-500 pl-4 py-2">
-                    <p className="font-semibold text-gray-900">{p.nombre_prueba}</p>
-                    {p.categoria && <p className="text-sm text-gray-600">Categoria: {p.categoria}</p>}
-                    {p.codigo_cups && <p className="text-sm text-gray-600">Codigo CUPS: {p.codigo_cups}</p>}
-                    {p.resultado && <p className="text-sm text-gray-600">Resultado: {p.resultado}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 7. DIAGNOSTICOS */}
-          {diagnosticos.length > 0 && (
-            <div data-seccion="diagnosticos" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">7. Diagnosticos</h2>
-              <div className="space-y-3">
-                {diagnosticos.map((d: any, i: number) => (
-                  <div key={i} className="border-l-4 border-pink-500 pl-4 py-2">
-                    <p className="font-semibold text-gray-900">{d.nombre_enfermedad}</p>
-                    {d.codigo_cie11 && <p className="text-sm text-gray-600">CIE-11: {d.codigo_cie11}</p>}
-                    {d.tipo_diagnostico && <p className="text-sm text-gray-600">Tipo: {d.tipo_diagnostico}</p>}
-                    {d.observaciones && <p className="text-sm text-gray-600">Observaciones: {d.observaciones}</p>}
-                    {d.impresion_diagnostica && <p className="text-sm text-gray-600">Impresion: {d.impresion_diagnostica}</p>}
-                    {d.analisis_objetivo && <p className="text-sm text-gray-600">Analisis: {d.analisis_objetivo}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 8. PLAN DE TRATAMIENTO */}
-          {plan_tratamiento.length > 0 && (
-            <div data-seccion="plan_tratamiento" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">8. Plan de Tratamiento</h2>
-              <div className="space-y-4">
-                {plan_tratamiento.map((p: any, i: number) => (
-                  <div key={i} className="border-l-4 border-violet-500 pl-4 py-2">
-                    {p.indicaciones_medicas && (
-                      <div className="mb-3">
-                        <p className="font-semibold text-gray-900 mb-1">Indicaciones Medicas</p>
-                        <p className="text-gray-600 text-sm whitespace-pre-line">{p.indicaciones_medicas}</p>
-                      </div>
-                    )}
-                    {p.recomendaciones_entrenamiento && (
-                      <div className="mb-3">
-                        <p className="font-semibold text-gray-900 mb-1">Recomendaciones de Entrenamiento</p>
-                        <p className="text-gray-600 text-sm whitespace-pre-line">{p.recomendaciones_entrenamiento}</p>
-                      </div>
-                    )}
-                    {p.plan_seguimiento && (
-                      <div className="mb-3">
-                        <p className="font-semibold text-gray-900 mb-1">Plan de Seguimiento</p>
-                        <p className="text-gray-600 text-sm whitespace-pre-line">{p.plan_seguimiento}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 9. REMISIONES A ESPECIALISTAS */}
-          {remisiones.length > 0 && (
-            <div data-seccion="remisiones" className="bg-white rounded-lg shadow p-6 print:shadow-none print:border print:border-gray-300">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 print:text-lg">9. Remisiones a Especialistas</h2>
-              <div className="space-y-3">
-                {remisiones.map((r: any, i: number) => (
-                  <div key={i} className="border-l-4 border-teal-500 pl-4 py-2">
-                    <p className="font-semibold text-gray-900">{r.especialista}</p>
-                    <p className="text-sm text-gray-600">Motivo: {r.motivo}</p>
-                    <div className="flex gap-4 text-sm mt-2">
-                      {r.prioridad && (
-                        <span className={"px-2 py-1 rounded " + (r.prioridad === "Urgente" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700")}>
-                          {r.prioridad}
-                        </span>
-                      )}
-                      {r.fecha_remision && <p className="text-gray-600">Fecha: {format(new Date(r.fecha_remision + "T12:00:00"), "d MMM yyyy", { locale: es })}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* MENSAJE SI NO HAY DATOS */}
-          {antecedentes.length === 0 && antecedentes_familiares.length === 0 && lesiones.length === 0 &&
-           cirugias.length === 0 && alergias.length === 0 && medicaciones.length === 0 &&
-           vacunas.length === 0 && signos_vitales.length === 0 && diagnosticos.length === 0 &&
-           remisiones.length === 0 && pruebas.length === 0 && revision_sistemas.length === 0 &&
-           plan_tratamiento.length === 0 && !motivo_consulta_enfermedad && !exploracion_fisica && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-              <p className="text-yellow-800">Esta historia clinica aun no contiene informacion detallada.</p>
-            </div>
-          )}
-
-          {/* PIE DE PAGINA PARA IMPRESION */}
-          <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-sm text-gray-600">
-            <p>INDERHUILA - Instituto Departamental de Recreacion y Deportes del Huila</p>
-            <p>Documento generado el {format(new Date(), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })}</p>
-          </div>
+        <div className="np" style={{ padding:'12px 24px', borderTop:`1px solid ${T.borderLight}`, display:'flex', gap:8, flexWrap:'wrap' }}>
+          {BTNS.map(({ a, label, icon, color, loading }) => (
+            <button key={a} onClick={() => abrirModal(a)} disabled={loading}
+              style={{ display:'flex', alignItems:'center', gap:7, padding:'8px 16px', borderRadius:T.radiusSm, border:'none', background:color, color:'#fff', fontSize:13, fontWeight:600, cursor:loading?'not-allowed':'pointer', opacity:loading?.7:1 }}>
+              {icon} {loading ? '...' : label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ================================================================= */}
-      {/* MODAL SELECTOR DE SECCIONES                                       */}
-      {/* ================================================================= */}
-      {mostrarModalSecciones && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-            {/* Header del modal */}
-            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+      {/* SECCIONES */}
+      <S1_MotivoConsulta motivo={mot} />
+      <S2_Antecedentes ap={ap} af={af} les={les} cir={cir} alg={alg} med={med} vac={vac} />
+      <S3_RevisionSistemas revision={rev} />
+      <S4_SignosVitales signos={sig} />
+      <S5_Exploracion exploracion={exp} />
+      <S6_Pruebas pruebas={pru} />
+      <S7_Diagnosticos diagnosticos={dx} />
+      <S8_PlanTratamiento planes={pla} remisiones={rem} />
+      <S9_Aptitud aptitud={apt} />
+
+      {/* MODAL SELECCIÓN SECCIONES */}
+      {modal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:16 }}>
+          <div style={{ background:T.surface, borderRadius:T.radius, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.borderLight}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <h3 className="text-lg font-bold">Seleccionar Secciones</h3>
-                <p className="text-blue-100 text-sm">
-                  {accionPendiente === 'pdf' && 'Elija las secciones para incluir en el PDF'}
-                  {accionPendiente === 'email' && 'Elija las secciones para enviar por Email'}
-                  {accionPendiente === 'whatsapp' && 'Elija las secciones para enviar por WhatsApp'}
-                  {accionPendiente === 'imprimir' && 'Elija las secciones para imprimir'}
-                </p>
+                <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:T.textPrimary }}>Seleccionar secciones</h3>
+                <p style={{ margin:'3px 0 0', fontSize:12, color:T.textMuted }}>Elige qué incluir en el documento</p>
               </div>
-              <button
-                onClick={() => { setMostrarModalSecciones(false); setAccionPendiente(null); }}
-                className="p-1 hover:bg-blue-500 rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setModal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:T.textMuted }}><X size={18} /></button>
             </div>
-
-            {/* Botones seleccionar/deseleccionar todas */}
-            <div className="px-6 pt-4 pb-2 flex gap-3 border-b">
-              <button
-                onClick={seleccionarTodas}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-              >
-                <CheckSquare className="w-4 h-4" />
-                Seleccionar todas
-              </button>
-              <button
-                onClick={deseleccionarTodas}
-                className="text-sm text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1"
-              >
-                <Square className="w-4 h-4" />
-                Deseleccionar todas
-              </button>
-              <span className="ml-auto text-sm text-gray-400">
-                {seccionesSeleccionadas.length} de {SECCIONES_DISPONIBLES.length}
-              </span>
+            <div style={{ padding:'14px 20px', display:'flex', flexDirection:'column', gap:6, maxHeight:340, overflowY:'auto' }}>
+              {SECCIONES.map(s => {
+                const sel = secciones.includes(s.id);
+                return (
+                  <button key={s.id} onClick={() => setSecciones(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:T.radiusSm, border:`1px solid ${sel?T.primary:T.border}`, background:sel?T.primaryLight:T.surface, cursor:'pointer', textAlign:'left', width:'100%' }}>
+                    {sel
+                      ? <CheckSquare size={16} style={{ color:T.primary, flexShrink:0 }} />
+                      : <Square size={16} style={{ color:T.textMuted, flexShrink:0 }} />}
+                    <span style={{ fontSize:13, color:sel?T.primary:T.textSecondary, fontWeight:sel?600:400 }}>{s.numero}. {s.nombre}</span>
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Lista de secciones */}
-            <div className="px-6 py-3 max-h-80 overflow-y-auto">
-              <div className="space-y-1">
-                {SECCIONES_DISPONIBLES.map((seccion) => {
-                  var isSelected = seccionesSeleccionadas.includes(seccion.id);
-                  return (
-                    <label
-                      key={seccion.id}
-                      className={"flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors " +
-                        (isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50 border border-transparent")}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSeccion(seccion.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className={"flex items-center gap-2 text-sm " + (isSelected ? "text-blue-900 font-medium" : "text-gray-700")}>
-                        <span className={"inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold " +
-                          (isSelected ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500")}>
-                          {seccion.numero}
-                        </span>
-                        {seccion.nombre}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Footer con botones de accion */}
-            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
-              <button
-                onClick={() => { setMostrarModalSecciones(false); setAccionPendiente(null); }}
-                className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmarAccion}
-                disabled={seccionesSeleccionadas.length === 0}
-                className={"px-5 py-2.5 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed " +
-                  (accionPendiente === 'pdf' ? "bg-red-600 hover:bg-red-700" :
-                   accionPendiente === 'email' ? "bg-blue-600 hover:bg-blue-700" :
-                   accionPendiente === 'whatsapp' ? "bg-green-600 hover:bg-green-700" :
-                   "bg-gray-600 hover:bg-gray-700")}
-              >
-                {accionPendiente === 'pdf' && "Descargar PDF"}
-                {accionPendiente === 'email' && "Enviar Email"}
-                {accionPendiente === 'whatsapp' && "Enviar WhatsApp"}
-                {accionPendiente === 'imprimir' && "Imprimir"}
+            <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.borderLight}`, display:'flex', justifyContent:'flex-end', gap:10 }}>
+              <button onClick={() => setModal(false)} style={{ padding:'8px 16px', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, cursor:'pointer' }}>Cancelar</button>
+              <button onClick={confirmar} disabled={secciones.length === 0}
+                style={{ padding:'8px 20px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                Continuar
               </button>
             </div>
           </div>
@@ -1030,3 +636,5 @@ export function VistaHistoriaClinica({ historiaId, onNavigate }: VistaHistoriaCl
     </div>
   );
 }
+
+export default VistaHistoriaClinica;

@@ -94,6 +94,22 @@ export const vacunasService = {
     const { data } = await api.post<Vacuna>(`/deportistas/${deportistaId}/vacunas`, body);
     return data;
   },
+  async getArchivo(deportistaId: string, vacunaId: string) {
+    const { data } = await api.get(`/deportistas/${deportistaId}/vacunas/${vacunaId}/archivo`, { responseType: 'blob' });
+    return data;
+  },
+  async uploadArchivo(deportistaId: string, vacunaId: string, file: File) {
+    const form = new FormData();
+    form.append('archivo', file);
+    const { data } = await api.post(`/deportistas/${deportistaId}/vacunas/${vacunaId}/archivo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return data;
+  },
+  async update(deportistaId: string, vacunaId: string, body: Partial<VacunaCreate>) {
+    const { data } = await api.put(`/deportistas/${deportistaId}/vacunas/${vacunaId}`, body);
+    return data;
+  },
   async remove(deportistaId: string, vacunaId: string) {
     await api.delete(`/deportistas/${deportistaId}/vacunas/${vacunaId}`);
   },
@@ -138,9 +154,10 @@ export const historiasService = {
     const { data } = await api.post('/historias_clinicas/completa', body);
     return data;
   },
-  async getByDeportista(deportistaId: string) {
-    const { data } = await api.get(`/historias_clinicas/deportista/${deportistaId}`);
-    return data;
+   async getByDeportista(deportistaId: string) {
+    const { data } = await api.get('/historias_clinicas', { params: { page: 1, page_size: 1000 } });
+    const items = Array.isArray(data) ? data : (data?.items ?? []);
+    return items.filter((h: any) => h.deportista_id === deportistaId);
   },
 };
 
@@ -208,7 +225,7 @@ export const documentosService = {
     return data;
   },
   async descargarHistoriaClinicaPdf(historiaId: string) {
-    const response = await api.get(`/documentos/${historiaId}/pdf`, { responseType: 'blob' });
+    const response = await api.get(`/documentos/${historiaId}/historia-clinica-pdf`, { responseType: 'blob' });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const a = document.createElement('a');
     a.href = url;

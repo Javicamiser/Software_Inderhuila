@@ -19,6 +19,7 @@ import { ExploracionFisica } from './pasos/ExploracionFisica';
 import { PruebasComplementarias } from './pasos/PruebasComplementarias';
 import { Diagnostico } from './pasos/Diagnostico';
 import { PlanTratamiento } from './pasos/PlanTratamiento';
+import { AptitudMedica } from './pasos/AptitudMedica';
 import { useAlert } from '@/app/components/AlertModal';
 import { useCatalogosContext } from '@/app/contexts/CatalogosContext';
 
@@ -159,7 +160,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
   });
 
   // Calcular total de pasos dinámicamente
-  const totalStepsBase = 6; // Evaluación, Antecedentes, Revisión, Exploración, Diagnóstico, Plan
+  const totalStepsBase = 7; // Evaluación, Antecedentes, Revisión, Exploración, Diagnóstico, Plan, Aptitud
   const totalSteps = formData.necesitaPruebas ? totalStepsBase + 1 : totalStepsBase;
 
   function getInitialFormData(): HistoriaClinicaData {
@@ -168,6 +169,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
       motivoConsulta: "",
       enfermedadActual: "",
       deportista_id: "",
+      aptitudMedica: { resultado: "", tipo_aptitud: "", observaciones: "", restricciones: "" },
       antecedentesPersonales: [],
       antecedentesFamiliares: [],
       lesionesDeportivas: false,
@@ -674,6 +676,16 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
               // Log de debugging
               console.log("📝 Datos a enviar a /historias_clinicas/completa:", JSON.stringify(datosEnvio, null, 2));
               
+              // Aptitud médica
+              if (formData.aptitudMedica?.resultado) {
+                datosEnvio.aptitud_medica = {
+                  resultado: formData.aptitudMedica.resultado,
+                  tipo_aptitud: formData.aptitudMedica.tipo_aptitud || '',
+                  observaciones: formData.aptitudMedica.observaciones || '',
+                  restricciones: formData.aptitudMedica.restricciones || '',
+                };
+              }
+
               // Enviar datos al backend
               const response = await historiaClinicaService.crearCompleta(datosEnvio);
               
@@ -831,7 +843,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           <PlanTratamiento 
             data={formData} 
             updateData={updateFormData} 
-            onSave={handleSubmit}
+            onNext={handleNext}
             onPrevious={handlePrevious}
             onCancel={handleCancel}
             onPrint={handlePrint}
@@ -845,13 +857,31 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           <PlanTratamiento 
             data={formData} 
             updateData={updateFormData} 
-            onSave={handleSubmit}
+            onNext={handleNext}
             onPrevious={handlePrevious}
             onCancel={handleCancel}
             onPrint={handlePrint}
             historiaId={historiaGuardadaId || ''}
             deportista={deportista}
             historia={null}
+          />
+        ) : (
+          <AptitudMedica
+            data={formData}
+            updateData={updateFormData}
+            onSave={handleSubmit}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
+          />
+        );
+      case 8:
+        return formData.necesitaPruebas ? (
+          <AptitudMedica
+            data={formData}
+            updateData={updateFormData}
+            onSave={handleSubmit}
+            onPrevious={handlePrevious}
+            onCancel={handleCancel}
           />
         ) : null;
       default:

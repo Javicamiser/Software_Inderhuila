@@ -17,6 +17,7 @@ export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = f
         "Pruebas Complementarias",
         "Diagnóstico",
         "Plan de Tratamiento",
+        "Aptitud Médica",
       ];
     } else {
       return [
@@ -26,6 +27,7 @@ export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = f
         "Exploración Física",
         "Diagnóstico",
         "Plan de Tratamiento",
+        "Aptitud Médica",
       ];
     }
   };
@@ -39,7 +41,7 @@ export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = f
         <p className="text-sm text-gray-500">
           Paso {currentStep} de {totalSteps}
         </p>
-        <h2 className="text-gray-800 mt-1">{stepLabels[currentStep - 1]}</h2>
+        <h2 className="text-gray-800 mt-1">{stepLabels[currentStep - 1] ?? ''}</h2>
       </div>
 
       {/* Barra de progreso visual */}
@@ -48,6 +50,7 @@ export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = f
           const stepNumber = index + 1;
           const isCompleted = stepNumber < currentStep;
           const isCurrent = stepNumber === currentStep;
+          const label = stepLabels[index] ?? '';
 
           return (
             <div key={stepNumber} className="flex items-center flex-1">
@@ -73,7 +76,7 @@ export function ProgressIndicator({ currentStep, totalSteps, necesitaPruebas = f
                     isCurrent ? "text-blue-600 font-semibold" : "text-gray-500"
                   }`}
                 >
-                  {stepLabels[index].split(" ")[0]}
+                  {label.split(" ")[0]}
                 </span>
               </div>
 

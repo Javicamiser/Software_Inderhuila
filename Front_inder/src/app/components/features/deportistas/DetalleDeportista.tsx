@@ -1,186 +1,314 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Eye } from 'lucide-react';
-import { deportistasService, historiaClinicaService } from '@/app/services/apiClient';
+// ============================================================
+// DETALLE DEPORTISTA
+// Tabs: Datos personales | Vacunas (CRUD + certificados) | Historias
+// ============================================================
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { deportistasService, vacunasService, historiaClinicaService, catalogosService } from '@/app/services/apiClient';
+import { useCatalogosContext } from '@/app/contexts/CatalogosContext';
 import { toast } from 'sonner';
+import { ArrowLeft, Plus, Edit2, Trash2, Upload, Download, FileText, Syringe, User, X, Loader2, ExternalLink } from 'lucide-react';
 
-interface Props {
-  deportistaId: string;
-  onBack?: () => void;
-}
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  success:'#10b981', successBg:'#d1fae5',
+  danger:'#ef4444', dangerBg:'#fee2e2',
+  radius:'12px', radiusSm:'8px',
+};
+
+const fmtFecha = (d?: string | null) =>
+  d ? new Date(d + 'T12:00:00').toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric' }) : '—';
+
+interface Props { deportistaId: string; onBack?: () => void; }
 
 export function DetalleDeportista({ deportistaId, onBack }: Props) {
+  const navigate = useNavigate();
+  const { tiposDocumento, sexos } = useCatalogosContext();
   const [deportista, setDeportista] = useState<any>(null);
-  const [historias, setHistorias] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [historias,  setHistorias]  = useState<any[]>([]);
+  const [vacunas,    setVacunas]    = useState<any[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [tab,        setTab]        = useState<'datos'|'vacunas'|'historias'>('datos');
+  const [modal,      setModal]      = useState(false);
+  const [editV,      setEditV]      = useState<any>(null);
+  const [form,       setForm]       = useState({ nombre_vacuna:'', fecha_administracion:'', observaciones:'', archivo: null as File|null });
+  const [saving,     setSaving]     = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    cargarDatos();
-  }, [deportistaId]);
+  useEffect(() => { cargar(); }, [deportistaId]);
 
-  const cargarDatos = async () => {
+  const cargar = async () => {
     try {
-      setIsLoading(true);
-      const depo = await deportistasService.getById(deportistaId);
-      const hists = await historiaClinicaService.getByDeportista(deportistaId);
-      setDeportista(depo);
+      setLoading(true);
+      const [dep, hists, vacs] = await Promise.all([
+        deportistasService.getById(deportistaId),
+        historiaClinicaService.getByDeportista(deportistaId).catch(() => []),
+        vacunasService.getAll(deportistaId).catch(() => []),
+      ]);
+      setDeportista(dep);
       setHistorias(Array.isArray(hists) ? hists : []);
-    } catch (error) {
-      toast.error('Error cargando datos');
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
+      setVacunas(Array.isArray(vacs) ? vacs : []);
+    } catch { toast.error('Error cargando datos'); }
+    finally { setLoading(false); }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const abrirCrear = () => { setEditV(null); setForm({ nombre_vacuna:'', fecha_administracion:'', observaciones:'', archivo:null }); setModal(true); };
+  const abrirEditar = (v: any) => { setEditV(v); setForm({ nombre_vacuna:v.nombre_vacuna||'', fecha_administracion:v.fecha_administracion?.split('T')[0]||'', observaciones:v.observaciones||'', archivo:null }); setModal(true); };
 
-  if (!deportista) {
-    return (
-      <div className="p-6 text-center">
-        <p className="text-red-600">Deportista no encontrado</p>
-      </div>
-    );
-  }
+  const guardar = async () => {
+    if (!form.nombre_vacuna.trim()) { toast.error('El nombre es requerido'); return; }
+    try {
+      setSaving(true);
+      const body = { nombre_vacuna:form.nombre_vacuna, fecha_administracion:form.fecha_administracion||undefined, observaciones:form.observaciones||undefined };
+      let id = editV?.id;
+      if (editV) { await vacunasService.update(deportistaId, id, body); toast.success('Vacuna actualizada'); }
+      else { const n = await vacunasService.create(deportistaId, body); id = n.id; toast.success('Vacuna registrada'); }
+      if (form.archivo && id) { await vacunasService.uploadArchivo(deportistaId, id, form.archivo); toast.success('Certificado adjuntado'); }
+      setModal(false); cargar();
+    } catch (e:any) { toast.error(e?.response?.data?.detail ?? 'Error al guardar'); }
+    finally { setSaving(false); }
+  };
+
+  const eliminar = async (v: any) => {
+    if (!confirm(`¿Eliminar "${v.nombre_vacuna}"?`)) return;
+    try { await vacunasService.remove(deportistaId, v.id); toast.success('Eliminada'); cargar(); }
+    catch { toast.error('Error al eliminar'); }
+  };
+
+  const descargar = async (v: any) => {
+    try {
+      const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch(`${API}/deportistas/${deportistaId}/vacunas/${v.id}/archivo`, { headers:{ ...(token?{Authorization:`Bearer ${token}`}:{}) } });
+      if (!res.ok) { toast.error('Sin certificado adjunto'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `certificado_${v.nombre_vacuna.replace(/\s/g,'_')}.pdf`;
+      a.click(); URL.revokeObjectURL(a.href);
+    } catch { toast.error('Error al descargar'); }
+  };
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', flexDirection:'column', gap:12 }}>
+      <Loader2 size={28} style={{ color:T.primary, animation:'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+  if (!deportista) return <div style={{ padding:24, color:T.danger }}>Deportista no encontrado</div>;
+
+  const tabBtn = (active: boolean) => ({
+    display:'flex' as const, alignItems:'center' as const, gap:7,
+    padding:'9px 18px', borderRadius:T.radiusSm, border:'none',
+    background:active?T.primary:'transparent', color:active?'#fff':T.textSecondary,
+    cursor:'pointer' as const, fontSize:13, fontWeight:active?600:400, transition:'all 0.15s',
+  });
+
+  const tipoDoc = tiposDocumento?.find((t:any) => t.id === deportista.tipo_documento_id)?.nombre;
+  const sexo    = sexos?.find((s:any) => s.id === deportista.sexo_id)?.nombre;
+
+  const CAMPOS = [
+    {label:'Tipo documento',   value: tipoDoc || deportista.tipo_documento_id?.slice?.(0,8)},
+    {label:'Número documento', value: deportista.numero_documento},
+    {label:'Fecha nacimiento', value: fmtFecha(deportista.fecha_nacimiento)},
+    {label:'Sexo',             value: sexo},
+    {label:'Teléfono',         value: deportista.telefono},
+    {label:'Email',            value: deportista.email},
+    {label:'Dirección',        value: deportista.direccion},
+    {label:'Deporte',          value: deportista.tipo_deporte},
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* ENCABEZADO */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={onBack || (() => window.history.back())}
-            className="bg-gray-200 text-gray-700 p-2 rounded hover:bg-gray-300 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">
-              {deportista.nombres} {deportista.apellidos}
-            </h1>
-            <p className="text-gray-600 mt-1">Documento: {deportista.numero_documento}</p>
+    <div style={{ display:'flex', flexDirection:'column', gap:20, maxWidth:900, margin:'0 auto' }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+      <button onClick={onBack||(() => navigate(-1))} style={{ display:'inline-flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', color:T.primary, fontSize:13, fontWeight:600, padding:0, width:'fit-content' }}>
+        <ArrowLeft size={16}/> Volver
+      </button>
+
+      {/* Header */}
+      <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, overflow:'hidden' }}>
+        <div style={{ background:`linear-gradient(135deg,${T.primary} 0%,#3b82f6 100%)`, padding:'20px 24px', display:'flex', alignItems:'center', gap:16 }}>
+          <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:22, fontWeight:800, flexShrink:0 }}>
+            {deportista.nombres?.charAt(0)}{deportista.apellidos?.charAt(0)}
           </div>
+          <div style={{ flex:1 }}>
+            <h1 style={{ margin:0, fontSize:20, fontWeight:800, color:'#fff' }}>{deportista.nombres} {deportista.apellidos}</h1>
+            <p style={{ margin:'4px 0 0', fontSize:12, color:'rgba(255,255,255,0.75)' }}>{deportista.tipo_documento} {deportista.numero_documento} · {deportista.tipo_deporte||'Sin deporte'}</p>
+          </div>
+          <span style={{ fontSize:12, fontWeight:600, padding:'4px 12px', borderRadius:20, background:'rgba(255,255,255,0.15)', color:'#fff' }}>
+            {deportista.estado||'Activo'}
+          </span>
         </div>
-
-        {/* DATOS PERSONALES */}
-        <div className="bg-white rounded-lg shadow p-8 mb-6">
-          <h2 className="text-2xl font-bold mb-6 text-gray-900">Datos Personales</h2>
-          
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Tipo Documento</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.tipo_documento || '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Número Documento</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.numero_documento}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Fecha Nacimiento</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.fecha_nacimiento ? new Date(deportista.fecha_nacimiento + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Sexo</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.sexo || '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Teléfono</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.telefono || '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Email</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.email || '-'}</p>
-            </div>
-
-            <div className="col-span-2">
-              <p className="text-sm text-gray-600 font-semibold uppercase">Dirección</p>
-              <p className="text-lg text-gray-900 mt-1">{deportista.direccion || '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 font-semibold uppercase">Estado</p>
-              <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold mt-1 ${
-                deportista.estado === 'activo'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {deportista.estado || 'Sin estado'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* HISTORIAS CLÍNICAS */}
-        <div className="bg-white rounded-lg shadow p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Historias Clínicas</h2>
-            <button
-              onClick={() => window.location.href = `/historia/nueva?deportista=${deportistaId}`}
-              className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Historia
-            </button>
-          </div>
-
-          {historias.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
-              No hay historias clínicas registradas
-            </p>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b-2 border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                    Fecha Apertura
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {historias.map((historia, idx) => (
-                  <tr
-                    key={historia.id}
-                    className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                  >
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {new Date(historia.fecha_apertura).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                        {historia.estado || 'Abierta'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => window.location.href = `/historia/${historia.id}`}
-                        className="text-blue-600 hover:bg-blue-100 p-2 rounded transition-colors inline-flex"
-                      >
-                        <Eye className="w-5 h-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <div style={{ padding:'8px 16px', borderBottom:`1px solid ${T.borderLight}`, display:'flex', gap:4, background:T.surfaceAlt }}>
+          <button style={tabBtn(tab==='datos')}     onClick={() => setTab('datos')}><User size={14}/>Datos</button>
+          <button style={tabBtn(tab==='vacunas')}   onClick={() => setTab('vacunas')}><Syringe size={14}/>Vacunas ({vacunas.length})</button>
+          <button style={tabBtn(tab==='historias')} onClick={() => setTab('historias')}><FileText size={14}/>Historias ({historias.length})</button>
         </div>
       </div>
+
+      {/* TAB DATOS */}
+      {tab==='datos' && (
+        <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, padding:'20px 24px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:20 }}>
+            {CAMPOS.map(({label,value}) => (
+              <div key={label}>
+                <p style={{ margin:'0 0 3px', fontSize:11, fontWeight:600, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</p>
+                <p style={{ margin:0, fontSize:14, color:T.textPrimary, fontWeight:500 }}>{value||'—'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB VACUNAS */}
+      {tab==='vacunas' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <p style={{ margin:0, fontSize:13, color:T.textSecondary }}>{vacunas.length} vacuna(s) registrada(s)</p>
+            <button onClick={abrirCrear} style={{ display:'flex', alignItems:'center', gap:7, padding:'8px 16px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+              <Plus size={14}/> Agregar vacuna
+            </button>
+          </div>
+          {vacunas.length===0 ? (
+            <div style={{ textAlign:'center', padding:'40px 0', background:T.surface, borderRadius:T.radius, border:`1px dashed ${T.border}` }}>
+              <Syringe size={32} style={{ color:T.textMuted, margin:'0 auto 12px', display:'block', opacity:0.4 }}/>
+              <p style={{ margin:0, fontSize:14, color:T.textMuted }}>No hay vacunas registradas</p>
+            </div>
+          ) : (
+            <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, overflow:'hidden' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead><tr style={{ background:T.surfaceAlt }}>
+                  {['Vacuna','Fecha','Observaciones','Certificado','Acciones'].map(h => (
+                    <th key={h} style={{ padding:'11px 16px', textAlign:'left', fontSize:12, fontWeight:600, color:T.textSecondary, borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {vacunas.map((v:any,i:number) => (
+                    <tr key={v.id} style={{ borderBottom:`1px solid ${T.borderLight}`, background:i%2===0?T.surface:T.surfaceAlt }}>
+                      <td style={{ padding:'12px 16px', fontSize:13, fontWeight:600, color:T.textPrimary }}>{v.nombre_vacuna}</td>
+                      <td style={{ padding:'12px 16px', fontSize:13, color:T.textSecondary }}>{fmtFecha(v.fecha_administracion)}</td>
+                      <td style={{ padding:'12px 16px', fontSize:13, color:T.textSecondary, maxWidth:200 }}>
+                        <span style={{ display:'-webkit-box', WebkitLineClamp:2 as any, WebkitBoxOrient:'vertical' as any, overflow:'hidden' }}>{v.observaciones||'—'}</span>
+                      </td>
+                      <td style={{ padding:'12px 16px' }}>
+                        {v.tiene_archivo || v.archivo_url ? (
+                          <button onClick={() => descargar(v)} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', background:T.primaryLight, color:T.primary, border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:12, fontWeight:600 }}>
+                            <Download size={13}/> Descargar
+                          </button>
+                        ) : (
+                          <span style={{ fontSize:12, color:T.textMuted, fontStyle:'italic' }}>Sin certificado</span>
+                        )}
+                      </td>
+                      <td style={{ padding:'12px 16px' }}>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button onClick={() => abrirEditar(v)} style={{ padding:7, borderRadius:T.radiusSm, border:'none', background:T.primaryLight, color:T.primary, cursor:'pointer' }}><Edit2 size={13}/></button>
+                          <button onClick={() => eliminar(v)}    style={{ padding:7, borderRadius:T.radiusSm, border:'none', background:T.dangerBg,    color:T.danger,  cursor:'pointer' }}><Trash2 size={13}/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB HISTORIAS */}
+      {tab==='historias' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <p style={{ margin:0, fontSize:13, color:T.textSecondary }}>{historias.length} historia(s) clínica(s)</p>
+            <button onClick={() => navigate('/historia')} style={{ display:'flex', alignItems:'center', gap:7, padding:'8px 16px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+              <Plus size={14}/> Nueva historia
+            </button>
+          </div>
+          {historias.length===0 ? (
+            <div style={{ textAlign:'center', padding:'40px 0', background:T.surface, borderRadius:T.radius, border:`1px dashed ${T.border}` }}>
+              <FileText size={32} style={{ color:T.textMuted, margin:'0 auto 12px', display:'block', opacity:0.4 }}/>
+              <p style={{ margin:0, fontSize:14, color:T.textMuted }}>No hay historias clínicas registradas</p>
+            </div>
+          ) : (
+            <div style={{ background:T.surface, borderRadius:T.radius, border:`1px solid ${T.border}`, overflow:'hidden' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead><tr style={{ background:T.surfaceAlt }}>
+                  {['Fecha apertura','Tipo','Estado','Ver'].map(h => (
+                    <th key={h} style={{ padding:'11px 16px', textAlign:'left', fontSize:12, fontWeight:600, color:T.textSecondary, borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {historias.map((h:any,i:number) => (
+                    <tr key={h.id} style={{ borderBottom:`1px solid ${T.borderLight}`, background:i%2===0?T.surface:T.surfaceAlt }}>
+                      <td style={{ padding:'12px 16px', fontSize:13, color:T.textPrimary }}>{fmtFecha(h.fecha_apertura)}</td>
+                      <td style={{ padding:'12px 16px' }}><span style={{ fontSize:11, padding:'3px 9px', borderRadius:20, background:T.primaryLight, color:T.primary, fontWeight:600 }}>{h.tipo_cita||'Control'}</span></td>
+                      <td style={{ padding:'12px 16px' }}><span style={{ fontSize:11, padding:'3px 9px', borderRadius:20, background:T.successBg, color:T.success, fontWeight:600 }}>{h.estado||'Abierta'}</span></td>
+                      <td style={{ padding:'12px 16px' }}>
+                        <button onClick={() => navigate(`/historia/${h.id}`)} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', background:T.primaryLight, color:T.primary, border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:12, fontWeight:600 }}>
+                          <ExternalLink size={13}/> Ver
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL VACUNA */}
+      {modal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:16 }}>
+          <div style={{ background:T.surface, borderRadius:T.radius, width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.borderLight}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:T.textPrimary }}>{editV?'Editar vacuna':'Registrar vacuna'}</h3>
+              <button onClick={() => setModal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:T.textMuted }}><X size={18}/></button>
+            </div>
+            <div style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>Nombre de la vacuna *</label>
+                <input type="text" value={form.nombre_vacuna} onChange={e => setForm(f => ({...f, nombre_vacuna:e.target.value}))}
+                  placeholder="ej: COVID-19, Hepatitis B, Tétano..."
+                  style={{ width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, boxSizing:'border-box', outline:'none' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>Fecha de administración</label>
+                <input type="date" value={form.fecha_administracion} onChange={e => setForm(f => ({...f, fecha_administracion:e.target.value}))}
+                  style={{ width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, boxSizing:'border-box', outline:'none' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>Observaciones</label>
+                <textarea value={form.observaciones} onChange={e => setForm(f => ({...f, observaciones:e.target.value}))}
+                  placeholder="Dosis, lote, institución, reacciones..." rows={3}
+                  style={{ width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, boxSizing:'border-box', outline:'none', resize:'vertical', fontFamily:'inherit' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>
+                  Certificado {editV?'(vacío = mantener actual)':''}
+                </label>
+                <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setForm(f => ({...f, archivo:e.target.files?.[0]||null}))} style={{ display:'none' }}/>
+                <button onClick={() => fileRef.current?.click()}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', border:`1px dashed ${T.border}`, borderRadius:T.radiusSm, background:T.surfaceAlt, cursor:'pointer', fontSize:13, color:T.textSecondary, width:'100%' }}>
+                  <Upload size={15} style={{ color:T.primary }}/>
+                  {form.archivo ? form.archivo.name : 'Seleccionar archivo (PDF, JPG, PNG)'}
+                </button>
+              </div>
+            </div>
+            <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.borderLight}`, display:'flex', justifyContent:'flex-end', gap:10 }}>
+              <button onClick={() => setModal(false)} style={{ padding:'8px 16px', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, cursor:'pointer' }}>Cancelar</button>
+              <button onClick={guardar} disabled={saving} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 18px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, fontSize:13, fontWeight:600, cursor:saving?'not-allowed':'pointer' }}>
+                {saving && <Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }}/>}
+                {saving?'Guardando...':'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default DetalleDeportista;

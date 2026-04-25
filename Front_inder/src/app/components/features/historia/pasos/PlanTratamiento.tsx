@@ -35,7 +35,8 @@ type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
   onPrevious: () => void;
-  onSave: () => void;
+  onSave?: () => void;
+  onNext?: () => void;
   onCancel: () => void;
   onPrint: () => void;
   historiaId?: string;
