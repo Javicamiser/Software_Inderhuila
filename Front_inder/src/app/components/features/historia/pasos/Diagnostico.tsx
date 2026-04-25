@@ -147,7 +147,7 @@ export function Diagnostico({ data, updateData, onNext, onPrevious, onCancel }: 
       {/* Impresión Diagnóstica */}
       <div>
         <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-          <Lightbulb className="w-4 h-4 text-yellow-500" />
+          <Lightbulb className="w-4 h-4" style={{ color:"#1F4788" }} />
           Impresión Diagnóstica
         </label>
         <textarea
@@ -250,7 +250,7 @@ export function Diagnostico({ data, updateData, onNext, onPrevious, onCancel }: 
           <button
             type="button"
             onClick={agregarDiagnostico}
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2"
+            style={{ width:"100%", background:"#1F4788", color:"#fff", padding:"11px 16px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
           >
             <Plus className="w-4 h-4" />
             Agregar Diagnóstico

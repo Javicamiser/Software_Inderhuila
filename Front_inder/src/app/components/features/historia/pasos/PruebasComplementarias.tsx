@@ -3,6 +3,18 @@ import { HistoriaClinicaData } from "../HistoriaClinica";
 import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2, FlaskConical, ScanLine, Activity, Dumbbell, AlertCircle, Search, File, Paperclip } from "lucide-react";
 import { buscarProcedimientoPorCodigo, buscarCodigosPorNombre, formatearCodigoCUPS } from "./cupsDatabase";
 
+
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', dangerBg:'#fef2f2',
+  success:'#10b981', successBg:'#f0fdf4',
+  radius:'12px', radiusSm:'8px',
+};
+
+
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
@@ -407,7 +419,7 @@ export function PruebasComplementarias({ data, updateData, onNext, onPrevious }:
                     <button
                       type="button"
                       onClick={() => handleEliminarPrueba(index)}
-                      className="ml-3 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      className="ml-3 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
                       title="Eliminar"
                     >
                       <Trash2 className="w-4 h-4" />

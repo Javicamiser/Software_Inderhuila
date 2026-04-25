@@ -2,6 +2,18 @@ import { useState, useEffect } from "react";
 import { HistoriaClinicaData } from "../HistoriaClinica";
 import { ChevronLeft, ChevronRight, Heart, Thermometer, Wind, Droplets, Activity, Ruler, Weight, AlertTriangle, FileText, Plus, X } from "lucide-react";
 
+
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', dangerBg:'#fef2f2',
+  success:'#10b981', successBg:'#f0fdf4',
+  radius:'12px', radiusSm:'8px',
+};
+
+
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
@@ -125,7 +137,7 @@ const SistemaExploracion = ({
                     key={index}
                     type="button"
                     onClick={() => aplicarPlantilla(nombreClave, plantilla)}
-                    className="block w-full text-left px-3 py-2 bg-blue-50 text-gray-700 text-sm rounded-md hover:bg-blue-100 border border-blue-200 transition-colors"
+                    className="block w-full text-left px-3 py-2 bg-blue-50 text-gray-700 text-sm rounded-md hover:bg-blue-50 border border-blue-200 transition-colors"
                   >
                     {plantilla}
                   </button>
@@ -139,14 +151,14 @@ const SistemaExploracion = ({
                         <button
                           type="button"
                           onClick={() => aplicarPlantilla(nombreClave, plantilla)}
-                          className="flex-1 text-left px-3 py-2 bg-purple-50 text-gray-700 text-sm rounded-md hover:bg-purple-100 border border-purple-200 transition-colors"
+                          className="flex-1 text-left px-3 py-2 bg-purple-50 text-gray-700 text-sm rounded-md hover:bg-blue-50 border border-purple-200 transition-colors"
                         >
                           {plantilla}
                         </button>
                         <button
                           type="button"
                           onClick={() => eliminarPlantillaPersonalizada(nombreClave, index)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          className="p-2 text-red-600 hover:bg-blue-50 rounded-md transition-colors"
                           title="Eliminar plantilla"
                         >
                           <X className="w-4 h-4" />
@@ -178,7 +190,7 @@ const SistemaExploracion = ({
                       <button
                         type="button"
                         onClick={() => guardarNuevaPlantilla(nombreClave)}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
+                        className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-blue-50 transition-colors"
                       >
                         Guardar
                       </button>

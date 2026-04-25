@@ -31,6 +31,18 @@ type PruebaAyuda = {
   nombre: string;
 };
 
+
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', dangerBg:'#fef2f2',
+  success:'#10b981', successBg:'#f0fdf4',
+  radius:'12px', radiusSm:'8px',
+};
+
+
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
@@ -442,13 +454,13 @@ export function PlanTratamiento({
               <button
                 type="button"
                 onClick={() => setMostrarFormReceta(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-blue-50 transition-colors font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 Agregar Receta
               </button>
             ) : (
-              <div className="bg-white p-4 rounded-lg border-2 border-green-300 space-y-3">
+              <div className="bg-white p-4 rounded-lg border-2 border-gray-200 space-y-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre del Medicamento <span className="text-red-500">*</span></label>
                   <input
@@ -486,7 +498,7 @@ export function PlanTratamiento({
                   <button
                     type="button"
                     onClick={agregarReceta}
-                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
                   >
                     Guardar Receta
                   </button>
@@ -522,7 +534,7 @@ export function PlanTratamiento({
                       <button
                         type="button"
                         onClick={() => eliminarReceta(idx)}
-                        className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                        className="ml-4 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -556,13 +568,13 @@ export function PlanTratamiento({
               <button
                 type="button"
                 onClick={() => setMostrarFormPrueba(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-50 transition-colors font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 Agregar Prueba
               </button>
             ) : (
-              <div className="bg-white p-4 rounded-lg border-2 border-blue-300 space-y-3">
+              <div className="bg-white p-4 rounded-lg border-2 border-gray-200 space-y-3">
                 <div className="relative">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Buscar Prueba por CUPS o Nombre</label>
                   <div className="relative">
@@ -587,7 +599,7 @@ export function PlanTratamiento({
                           key={cups.codigo}
                           type="button"
                           onClick={() => seleccionarCUPS(cups)}
-                          className="w-full text-left px-4 py-2 hover:bg-blue-100 border-b border-gray-200 last:border-b-0 transition-colors"
+                          className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-200 last:border-b-0 transition-colors"
                         >
                           <p className="font-semibold text-gray-800">{cups.nombre}</p>
                           <p className="text-xs text-gray-600">CUPS: {cups.codigo}</p>
@@ -609,7 +621,7 @@ export function PlanTratamiento({
                     type="button"
                     onClick={agregarPrueba}
                     disabled={!nuevaPrueba.codigoCUPS || !nuevaPrueba.nombre}
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors font-semibold"
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-50 disabled:bg-blue-400 transition-colors font-semibold"
                   >
                     Agregar Prueba
                   </button>
@@ -640,7 +652,7 @@ export function PlanTratamiento({
                     <button
                       type="button"
                       onClick={() => eliminarPrueba(prueba.id)}
-                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      className="ml-4 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -729,7 +741,7 @@ export function PlanTratamiento({
             <button
               type="button"
               onClick={agregarInterconsulta}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
             >
               Agregar Interconsulta
             </button>
@@ -745,7 +757,7 @@ export function PlanTratamiento({
                     <button
                       type="button"
                       onClick={() => eliminarInterconsulta(idx)}
-                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      className="ml-4 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -818,7 +830,7 @@ export function PlanTratamiento({
             <button
               type="button"
               onClick={agregarRemision}
-              className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-semibold"
+              className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
             >
               Agregar Remisión
             </button>
@@ -842,7 +854,7 @@ export function PlanTratamiento({
                     <button
                       type="button"
                       onClick={() => eliminarRemision(idx)}
-                      className="ml-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      className="ml-4 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -860,7 +872,7 @@ export function PlanTratamiento({
           <button
             onClick={handleDescargarPDF}
             disabled={isDownloading}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-400"
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-blue-50 transition-colors disabled:bg-red-400"
             title="Descargar PDF"
           >
             <Download className="w-4 h-4" />
@@ -870,7 +882,7 @@ export function PlanTratamiento({
           <button
             onClick={handleEnviarEmail}
             disabled={isSendingEmail}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-50 transition-colors disabled:bg-blue-400"
             title="Enviar por Email"
           >
             <Mail className="w-4 h-4" />
@@ -880,7 +892,7 @@ export function PlanTratamiento({
           <button
             onClick={handleEnviarWhatsApp}
             disabled={isSendingWhatsApp}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-blue-50 transition-colors disabled:bg-green-400"
             title="Enviar por WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />

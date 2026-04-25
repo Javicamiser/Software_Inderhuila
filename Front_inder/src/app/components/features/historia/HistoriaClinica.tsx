@@ -111,6 +111,13 @@ export type HistoriaClinicaData = {
   recomendacionesEntrenamiento: string;
   planSeguimiento: string;
   remisionesEspecialistas: Array<{ especialista: string; motivo: string; prioridad: "Normal" | "Urgente"; fechaRemision: string }>;
+  // Paso 7: Aptitud Médica
+  aptitudMedica?: {
+    resultado: string;
+    tipo_aptitud: string;
+    observaciones: string;
+    restricciones: string;
+  };
 };
 
 interface HistoriaClinicaProps {
@@ -942,7 +949,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
           <div className="flex gap-4 w-full sm:w-auto">
             <button
               onClick={handleCancel}
-              className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+              style={{ padding:"10px 20px", background:"#fee2e2", border:"1px solid #fecaca", borderRadius:"8px", cursor:"pointer", fontSize:13, fontWeight:600, color:"#dc2626" }}
             >
               Salir
             </button>
@@ -960,7 +967,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-400 transition-colors font-semibold"
+                style={{ padding:"10px 24px", background:"#1F4788", color:"#fff", border:"none", borderRadius:"8px", cursor:"pointer", fontSize:13, fontWeight:600 }}
               >
                 {isSubmitting ? 'Guardando...' : 'Guardar Historia Clínica'}
               </button>
