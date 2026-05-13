@@ -1,5 +1,5 @@
 // ============================================================
-// SIDEBAR — Diseño profesional
+// SIDEBAR — Filtrado por permisos reales del usuario
 // ============================================================
 import { ChevronRight, LayoutDashboard, Users, FileText, Calendar, FolderOpen, BarChart2, Settings, UserCog } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -11,13 +11,18 @@ interface SidebarProps {
   onNavigate: (view: string) => void;
 }
 
+// modulo: debe coincidir exactamente con los módulos en la tabla permisos
 const MENU_BASE = [
-  { view: 'dashboard',   label: 'Dashboard',       icon: LayoutDashboard },
-  { view: 'deportistas', label: 'Deportistas',      icon: Users           },
-  { view: 'historia',    label: 'Historia Clínica', icon: FileText        },
-  { view: 'citas',       label: 'Citas',            icon: Calendar        },
-  { view: 'archivos',    label: 'Archivos',         icon: FolderOpen      },
-  { view: 'reportes',    label: 'Reportes',         icon: BarChart2       },
+  { view: 'dashboard',   label: 'Dashboard',       icon: LayoutDashboard, modulo: null          }, // siempre visible
+  { view: 'deportistas', label: 'Deportistas',      icon: Users,           modulo: 'deportistas'  },
+  { view: 'historia',    label: 'Historia Clínica', icon: FileText,        modulo: 'historia'     },
+  { view: 'citas',       label: 'Citas',            icon: Calendar,        modulo: 'citas'        },
+  { view: 'archivos',    label: 'Archivos',         icon: FolderOpen,      modulo: 'archivos'     },
+  { view: 'reportes',    label: 'Reportes',         icon: BarChart2,       modulo: 'reportes'     },
+];
+
+const MENU_ADMIN_EXTRA = [
+  { view: 'usuarios',    label: 'Usuarios',         icon: UserCog,         modulo: 'usuarios'     },
 ];
 
 function NavItem({ icon, label, active, isOpen, onClick }: {
@@ -37,19 +42,30 @@ function NavItem({ icon, label, active, isOpen, onClick }: {
         transition: 'all 0.15s', marginBottom: 2, position: 'relative',
       }}
       onMouseEnter={e => {
-        if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
+          (e.currentTarget as HTMLElement).style.color = '#e2e8f0';
+        }
       }}
       onMouseLeave={e => {
-        if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.background = 'transparent';
+          (e.currentTarget as HTMLElement).style.color = '#94a3b8';
+        }
       }}
     >
       {active && isOpen && (
-        <span style={{ position: 'absolute', left: 0, top: '25%', bottom: '25%', width: 3, background: '#3b82f6', borderRadius: '0 3px 3px 0' }} />
+        <span style={{
+          position: 'absolute', left: 0, top: '25%', bottom: '25%',
+          width: 3, background: '#3b82f6', borderRadius: '0 3px 3px 0',
+        }} />
       )}
       <span style={{ flexShrink: 0, display: 'flex' }}>{icon}</span>
       {isOpen && (
         <>
-          <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>{label}</span>
+          <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+            {label}
+          </span>
           {active && <ChevronRight size={13} style={{ opacity: 0.5 }} />}
         </>
       )}
@@ -58,11 +74,20 @@ function NavItem({ icon, label, active, isOpen, onClick }: {
 }
 
 export function Sidebar({ isOpen, currentView, onNavigate }: SidebarProps) {
-  const { isAdmin } = useAuth();
-  const MENU = isAdmin
-    ? [...MENU_BASE, { view: 'usuarios', label: 'Usuarios', icon: UserCog }]
-    : MENU_BASE;
+  const { isAdmin, puedeHacer } = useAuth();
+
+  // Filtrar menú base: mostrar item si no requiere permiso (dashboard)
+  // o si el usuario tiene permiso 'ver' en ese módulo
+  const menuFiltrado = [
+    ...MENU_BASE.filter(item =>
+      item.modulo === null || puedeHacer(item.modulo, 'ver')
+    ),
+    // Usuarios: solo admin (o quien tenga permiso 'ver' en usuarios)
+    ...MENU_ADMIN_EXTRA.filter(() => isAdmin || puedeHacer('usuarios', 'ver')),
+  ];
+
   const w = isOpen ? '220px' : '60px';
+
   return (
     <aside style={{
       width: w, minWidth: w, background: '#0f172a',
@@ -76,25 +101,37 @@ export function Sidebar({ isOpen, currentView, onNavigate }: SidebarProps) {
         padding: isOpen ? '0 16px' : '0', justifyContent: isOpen ? 'flex-start' : 'center',
         gap: 10, flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
-        <img src={logoInderhuila} alt="INDERHUILA" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+        <img
+          src={logoInderhuila}
+          alt="INDERHUILA"
+          style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+        />
         {isOpen && (
           <div style={{ overflow: 'hidden', lineHeight: 1.25 }}>
-            <p style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>INDERHUILA</p>
-            <p style={{ color: '#475569', fontSize: 10, margin: 0, whiteSpace: 'nowrap' }}>Sistema Médico</p>
+            <p style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
+              INDERHUILA
+            </p>
+            <p style={{ color: '#475569', fontSize: 10, margin: 0, whiteSpace: 'nowrap' }}>
+              Sistema Médico
+            </p>
           </div>
         )}
       </div>
 
-      {/* Label */}
+      {/* Label sección */}
       {isOpen && (
-        <p style={{ color: '#334155', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '16px 16px 6px', margin: 0 }}>
+        <p style={{
+          color: '#334155', fontSize: 10, fontWeight: 600,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          padding: '16px 16px 6px', margin: 0,
+        }}>
           Menú principal
         </p>
       )}
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: isOpen ? '0 8px' : '8px 0', overflowX: 'hidden' }}>
-        {MENU.map(({ view, label, icon: Icon }) => (
+        {menuFiltrado.map(({ view, label, icon: Icon }) => (
           <NavItem
             key={view}
             icon={<Icon size={16} />}
@@ -106,16 +143,18 @@ export function Sidebar({ isOpen, currentView, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: isOpen ? '8px' : '8px 0' }}>
-        <NavItem
-          icon={<Settings size={16} />}
-          label="Configuración"
-          active={currentView === 'configuracion'}
-          isOpen={isOpen}
-          onClick={() => onNavigate('configuracion')}
-        />
-      </div>
+      {/* Footer — Configuración: solo si tiene permiso o es admin */}
+      {(isAdmin || puedeHacer('configuracion', 'ver')) && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: isOpen ? '8px' : '8px 0' }}>
+          <NavItem
+            icon={<Settings size={16} />}
+            label="Configuración"
+            active={currentView === 'configuracion'}
+            isOpen={isOpen}
+            onClick={() => onNavigate('configuracion')}
+          />
+        </div>
+      )}
     </aside>
   );
 }

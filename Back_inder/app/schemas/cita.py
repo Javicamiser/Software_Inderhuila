@@ -3,21 +3,30 @@ from datetime import date, time, datetime
 from uuid import UUID
 from typing import Optional
 
+
 class CatalogoItemSimple(BaseModel):
     id: UUID
     nombre: str
-    
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeportistaSimple(BaseModel):
+    id: UUID
+    nombres: str
+    apellidos: str
+    numero_documento: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CitaCreate(BaseModel):
-    deportista_id: str  # UUID como string
-    fecha: str  # YYYY-MM-DD
-    hora: str  # HH:MM:SS
-    tipo_cita_id: str  # UUID como string
-    estado_cita_id: str  # UUID como string
+    deportista_id: str
+    fecha: str
+    hora: str
+    tipo_cita_id: str
+    estado_cita_id: str
     observaciones: Optional[str] = None
-
     model_config = ConfigDict(from_attributes=True)
+
 
 class CitaUpdate(BaseModel):
     fecha: Optional[str] = None
@@ -25,8 +34,8 @@ class CitaUpdate(BaseModel):
     tipo_cita_id: Optional[str] = None
     estado_cita_id: Optional[str] = None
     observaciones: Optional[str] = None
-
     model_config = ConfigDict(from_attributes=True)
+
 
 class CitaResponse(BaseModel):
     id: UUID
@@ -39,5 +48,5 @@ class CitaResponse(BaseModel):
     created_at: Optional[datetime]
     tipo_cita: Optional[CatalogoItemSimple] = None
     estado_cita: Optional[CatalogoItemSimple] = None
-
+    deportista: Optional[DeportistaSimple] = None   # ← NUEVO
     model_config = ConfigDict(from_attributes=True)

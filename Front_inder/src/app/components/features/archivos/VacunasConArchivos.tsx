@@ -1,4 +1,5 @@
 import React, { useState, useEffect, JSX } from 'react';
+import { vacunasService } from '@/app/services/apiClient';
 import { Plus, X, FileUp, Trash2, Calendar, Download, File, AlertCircle, Loader, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -63,19 +64,11 @@ export const VacunasConArchivos: React.FC<Props> = ({
     }
   }, [deportista_id, readonly]);
 
-  const cargarVacunasDelServidor = async () => {
+const cargarVacunasDelServidor = async () => {
+    if (!deportista_id) return;
     try {
       setIsLoadingVacunas(true);
-      const response = await fetch(
-        `http://localhost:8000/api/v1/deportistas/${deportista_id}/vacunas`
-      );
-
-      if (!response.ok) {
-        console.warn('No se encontraron vacunas previas');
-        return;
-      }
-
-      const data = await response.json();
+      const data = await vacunasService.getAll(deportista_id);
       const vacunasConServidorFlag = (data || []).map((v: VacunaConArchivo) => ({
         ...v,
         es_nueva: false,

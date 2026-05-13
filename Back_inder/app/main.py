@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 from app.models import *
 
 from app.api.v1 import deportistas, historias, citas, archivos, cie11, cups, catalogos, antecedentes, documentos
+from app.api.v1 import perfil as perfil_router
 from app.api.v1.descarga_segura import router as descarga_segura_router
 from app.api.v1.auth import router as auth_router
 
@@ -23,7 +24,6 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="0.1.0",
     description="Backend Historia Clinica Deportiva - INDERHUILA",
-    redirect_slashes=False,
 )
 
 # ── MIDDLEWARE JWT ────────────────────────────────────────────
@@ -76,3 +76,4 @@ app.include_router(catalogos.router,         prefix="/api/v1/catalogos")
 app.include_router(antecedentes.router,      prefix="/api/v1")
 app.include_router(documentos.router,        prefix="/api/v1")
 app.include_router(descarga_segura_router,   prefix="/api/v1")
+app.include_router(perfil_router.router,       prefix="/api/v1/perfil")

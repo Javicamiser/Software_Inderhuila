@@ -1,243 +1,114 @@
 import { HistoriaClinicaData } from "../HistoriaClinica";
-import { ChevronRight, ChevronLeft, Heart, Wind, Utensils, Brain, Bone, Droplet, Activity, User2 } from "lucide-react";
+import { Heart, Wind, Utensils, Brain, Bone, Droplet, Activity, User2 } from "lucide-react";
+
+const T = {
+  primary:'#1F4788', surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', success:'#10b981', successBg:'#f0fdf4',
+  radius:'12px', radiusSm:'8px',
+};
+
+// Cada sistema tiene su color suave diferenciado
+const SISTEMAS = [
+  { id:"cardiovascular",    nombre:"Cardiovascular",       Icon:Heart,    color:'#dc2626', bg:'#fff1f2', border:'#fecaca' },
+  { id:"respiratorio",      nombre:"Respiratorio",         Icon:Wind,     color:'#1d4ed8', bg:'#eff6ff', border:'#bfdbfe' },
+  { id:"digestivo",         nombre:"Digestivo",            Icon:Utensils, color:'#b45309', bg:'#fffbeb', border:'#fde68a' },
+  { id:"neurologico",       nombre:"Neurológico",          Icon:Brain,    color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe' },
+  { id:"musculoesqueletico",nombre:"Musculoesquelético",   Icon:Bone,     color:'#374151', bg:'#f9fafb', border:'#d1d5db' },
+  { id:"genitourinario",    nombre:"Genitourinario",       Icon:Droplet,  color:'#0e7490', bg:'#ecfeff', border:'#a5f3fc' },
+  { id:"endocrino",         nombre:"Endocrino",            Icon:Activity, color:'#065f46', bg:'#f0fdf4', border:'#a7f3d0' },
+  { id:"pielFaneras",       nombre:"Piel y Faneras",       Icon:User2,    color:'#9a3412', bg:'#fff7ed', border:'#fed7aa' },
+] as const;
+
+type SistemaId = typeof SISTEMAS[number]['id'];
 
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  onCancel?: () => void;
+  onNext: () => void; onPrevious: () => void; onCancel?: () => void;
 };
-
-type Sistema = {
-  id: keyof HistoriaClinicaData["revisionSistemas"];
-  nombre: string;
-  icon: any;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-};
-
-const sistemas: Sistema[] = [
-  {
-    id: "cardiovascular",
-    nombre: "Cardiovascular",
-    icon: Heart,
-    color: "text-red-600",
-    bgColor: "bg-red-50",
-    borderColor: "border-red-500",
-  },
-  {
-    id: "respiratorio",
-    nombre: "Respiratorio",
-    icon: Wind,
-    color: "text-blue-600",
-    bgColor: "bg-blue-50",
-    borderColor: "border-blue-500",
-  },
-  {
-    id: "digestivo",
-    nombre: "Digestivo",
-    icon: Utensils,
-    color: "text-amber-600",
-    bgColor: "bg-amber-50",
-    borderColor: "border-amber-500",
-  },
-  {
-    id: "neurologico",
-    nombre: "Neurológico",
-    icon: Brain,
-    color: "text-purple-600",
-    bgColor: "bg-purple-50",
-    borderColor: "border-purple-500",
-  },
-  {
-    id: "musculoesqueletico",
-    nombre: "Musculoesquelético",
-    icon: Bone,
-    color: "text-gray-700",
-    bgColor: "bg-gray-50",
-    borderColor: "border-gray-500",
-  },
-  {
-    id: "genitourinario",
-    nombre: "Genitourinario",
-    icon: Droplet,
-    color: "text-cyan-600",
-    bgColor: "bg-cyan-50",
-    borderColor: "border-cyan-500",
-  },
-  {
-    id: "endocrino",
-    nombre: "Endocrino",
-    icon: Activity,
-    color: "text-green-600",
-    bgColor: "bg-green-50",
-    borderColor: "border-green-500",
-  },
-  {
-    id: "pielFaneras",
-    nombre: "Piel y Faneras",
-    icon: User2,
-    color: "text-orange-600",
-    bgColor: "bg-orange-50",
-    borderColor: "border-orange-500",
-  },
-];
 
 export function RevisionSistemas({ data, updateData, onNext, onPrevious, onCancel }: Props) {
-  const handleEstadoChange = (sistemaId: keyof HistoriaClinicaData["revisionSistemas"], estado: "normal" | "anormal") => {
-    const newRevision = { ...data.revisionSistemas };
-    newRevision[sistemaId] = {
-      ...newRevision[sistemaId],
-      estado,
-      observaciones: estado === "normal" ? "" : newRevision[sistemaId].observaciones,
-    };
-    updateData({ revisionSistemas: newRevision });
+  const handleEstado = (id: SistemaId, estado: "normal" | "anormal") => {
+    const r = { ...data.revisionSistemas };
+    r[id] = { ...r[id], estado, observaciones: estado === "normal" ? "" : r[id].observaciones };
+    updateData({ revisionSistemas: r });
   };
 
-  const handleObservacionesChange = (sistemaId: keyof HistoriaClinicaData["revisionSistemas"], observaciones: string) => {
-    const newRevision = { ...data.revisionSistemas };
-    newRevision[sistemaId] = {
-      ...newRevision[sistemaId],
-      observaciones,
-    };
-    updateData({ revisionSistemas: newRevision });
+  const handleObs = (id: SistemaId, observaciones: string) => {
+    const r = { ...data.revisionSistemas };
+    r[id] = { ...r[id], observaciones };
+    updateData({ revisionSistemas: r });
   };
 
-  const handleNext = () => {
-    // Validar que todos los sistemas hayan sido evaluados
-    const sistemasNoEvaluados = sistemas.filter(
-      (sistema) => !data.revisionSistemas[sistema.id].estado
-    );
-
-    if (sistemasNoEvaluados.length > 0) {
-      alert(
-        `Por favor evalúe todos los sistemas. Faltan: ${sistemasNoEvaluados
-          .map((s) => s.nombre)
-          .join(", ")}`
-      );
-      return;
-    }
-
-    // Validar que los sistemas marcados como anormales tengan observaciones
-    const sistemasAnormalesSinObservaciones = sistemas.filter(
-      (sistema) =>
-        data.revisionSistemas[sistema.id].estado === "anormal" &&
-        !data.revisionSistemas[sistema.id].observaciones.trim()
-    );
-
-    if (sistemasAnormalesSinObservaciones.length > 0) {
-      alert(
-        `Por favor agregue observaciones para los sistemas marcados como anormales: ${sistemasAnormalesSinObservaciones
-          .map((s) => s.nombre)
-          .join(", ")}`
-      );
-      return;
-    }
-
-    onNext();
-  };
+  const evaluados = SISTEMAS.filter(s => data.revisionSistemas[s.id]?.estado).length;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-[#C84F3B]/10 to-[#1F4788]/10 p-4 rounded-lg border-l-4 border-[#C84F3B]">
-        <p className="text-sm text-gray-700">
-          <span className="font-semibold">Instrucciones:</span> Revise cada sistema y marque si está <strong>Normal</strong> o <strong>Anormal</strong>.
-          Si marca como anormal, debe agregar observaciones detalladas.
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* Instrucciones */}
+      <div style={{ padding:'12px 16px', background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:T.radiusSm, borderLeft:`3px solid ${T.primary}` }}>
+        <p style={{ margin:0, fontSize:13, color:'#0c4a6e' }}>
+          <strong>Instrucciones:</strong> Revise cada sistema y marque si está <strong>Normal</strong> o <strong>Anormal</strong>. Si marca como anormal, agregue observaciones detalladas.
         </p>
       </div>
 
-      {/* Grid de sistemas */}
-      <div className="space-y-4">
-        {sistemas.map((sistema) => {
-          const Icon = sistema.icon;
-          const estadoActual = data.revisionSistemas[sistema.id].estado;
-          const observaciones = data.revisionSistemas[sistema.id].observaciones;
+      {/* Sistemas */}
+      {SISTEMAS.map(({ id, nombre, Icon, color, bg, border }) => {
+        const estado = data.revisionSistemas[id]?.estado ?? "";
+        const obs = data.revisionSistemas[id]?.observaciones ?? "";
+        return (
+          <div key={id} style={{ background:bg, border:`1px solid ${border}`, borderLeft:`4px solid ${color}`, borderRadius:T.radiusSm, padding:'14px 18px' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
+              {/* Ícono + nombre */}
+              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:200, flexShrink:0, paddingTop:2 }}>
+                <Icon size={18} style={{ color }}/>
+                <span style={{ fontSize:13, fontWeight:700, color }}>{nombre}</span>
+              </div>
 
-          return (
-            <div
-              key={sistema.id}
-              className={`${sistema.bgColor} p-5 rounded-lg border-l-4 ${sistema.borderColor}`}
-            >
-              <div className="flex items-start gap-4">
-                {/* Icono y nombre del sistema */}
-                <div className="flex items-center gap-3 min-w-[200px]">
-                  <Icon className={`w-6 h-6 ${sistema.color}`} />
-                  <h3 className={`font-semibold ${sistema.color}`}>
-                    {sistema.nombre}
-                  </h3>
+              {/* Radios + observaciones */}
+              <div style={{ flex:1 }}>
+                <div style={{ display:'flex', gap:20, marginBottom: estado === 'anormal' ? 10 : 0 }}>
+                  {(['normal','anormal'] as const).map(op => (
+                    <label key={op} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
+                      <input type="radio" name={`rev-${id}`} checked={estado === op}
+                        onChange={() => handleEstado(id, op)}
+                        style={{ accentColor: op === 'normal' ? T.success : T.danger, width:14, height:14 }}/>
+                      <span style={{ color: op === 'normal' ? '#065f46' : '#991b1b', fontWeight:500, textTransform:'capitalize' }}>{op}</span>
+                    </label>
+                  ))}
                 </div>
 
-                {/* Opciones Normal/Anormal */}
-                <div className="flex-1">
-                  <div className="flex gap-6 mb-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`sistema-${sistema.id}`}
-                        checked={estadoActual === "normal"}
-                        onChange={() => handleEstadoChange(sistema.id, "normal")}
-                        className="w-4 h-4 text-green-600 focus:ring-2 focus:ring-green-500"
-                      />
-                      <span className="text-gray-700 font-medium">Normal</span>
+                {estado === 'normal' && (
+                  <p style={{ margin:0, fontSize:11, color:T.success }}>✓ Sin hallazgos patológicos</p>
+                )}
+
+                {estado === 'anormal' && (
+                  <div>
+                    <label style={{ display:'block', marginBottom:5, fontSize:12, fontWeight:600, color:'#991b1b' }}>
+                      Observaciones <span style={{ color:T.danger }}>*</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`sistema-${sistema.id}`}
-                        checked={estadoActual === "anormal"}
-                        onChange={() => handleEstadoChange(sistema.id, "anormal")}
-                        className="w-4 h-4 text-red-600 focus:ring-2 focus:ring-red-500"
-                      />
-                      <span className="text-gray-700 font-medium">Anormal</span>
-                    </label>
+                    <textarea value={obs} rows={2}
+                      onChange={e => handleObs(id, e.target.value)}
+                      placeholder={`Describa los hallazgos anormales del sistema ${nombre.toLowerCase()}...`}
+                      style={{ width:'100%', padding:'8px 10px', border:'1px solid #fca5a5', borderRadius:T.radiusSm, fontSize:13, resize:'vertical', outline:'none', fontFamily:'inherit', background:T.surface, boxSizing:'border-box' }}/>
                   </div>
-
-                  {/* Campo de observaciones (visible solo si es anormal) */}
-                  {estadoActual === "anormal" && (
-                    <div className="mt-3">
-                      <label className="block mb-1 text-sm font-medium text-gray-700">
-                        Observaciones <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        value={observaciones}
-                        onChange={(e) => handleObservacionesChange(sistema.id, e.target.value)}
-                        rows={2}
-                        placeholder={`Describa los hallazgos anormales del sistema ${sistema.nombre.toLowerCase()}...`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C84F3B] resize-none bg-white"
-                      />
-                    </div>
-                  )}
-
-                  {/* Mensaje informativo si está marcado como normal */}
-                  {estadoActual === "normal" && (
-                    <p className="text-xs text-green-700 mt-1">
-                      ✓ Sistema evaluado sin hallazgos patológicos
-                    </p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
 
-      {/* Contador de sistemas evaluados */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">
-            Sistemas evaluados: 
-            <span className="font-semibold ml-2">
-              {sistemas.filter((s) => data.revisionSistemas[s.id].estado).length} / {sistemas.length}
-            </span>
-          </span>
-          {sistemas.filter((s) => data.revisionSistemas[s.id].estado).length === sistemas.length && (
-            <span className="text-sm text-green-600 font-semibold">
-              ✓ Revisión completa
-            </span>
-          )}
-        </div>
+      {/* Contador */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 16px', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:T.radiusSm }}>
+        <span style={{ fontSize:13, color:T.textSecondary }}>
+          Sistemas evaluados: <strong style={{ color:T.textPrimary }}>{evaluados} / {SISTEMAS.length}</strong>
+        </span>
+        {evaluados === SISTEMAS.length && (
+          <span style={{ fontSize:13, color:T.success, fontWeight:600 }}>✓ Revisión completa</span>
+        )}
       </div>
     </div>
   );

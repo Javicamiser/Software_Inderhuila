@@ -1,7 +1,7 @@
 # ============================================================
 # MODELOS: Usuario, Rol, Permiso
 # ============================================================
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -27,8 +27,8 @@ class Permiso(Base):
 
     id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rol_id  = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
-    modulo  = Column(String(50), nullable=False)  # deportistas, historia, citas, archivos, reportes, usuarios
-    accion  = Column(String(20), nullable=False)  # ver, crear, editar, eliminar
+    modulo  = Column(String(50), nullable=False)
+    accion  = Column(String(20), nullable=False)
 
     rol     = relationship("Rol", back_populates="permisos")
 
@@ -43,6 +43,8 @@ class Usuario(Base):
     hashed_password = Column(String(255), nullable=False)
     rol_id          = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
     activo          = Column(Boolean, default=True)
+    # Firma digital del médico — almacenada como base64 en Text
+    firma_imagen    = Column(Text, nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

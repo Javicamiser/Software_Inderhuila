@@ -15,16 +15,23 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // Configuración para que el servidor acepte conexiones externas
     host: true,
     allowedHosts: ['couptative-alta-unsecretive.ngrok-free.dev'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // Seguir redirecciones automáticamente (ej: /vacunas → /vacunas/)
+        // preservando todos los headers incluyendo Authorization
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Reenviar el header Authorization en redirecciones
+            const auth = req.headers['authorization'];
+            if (auth) proxyReq.setHeader('Authorization', auth);
+          });
+        },
       },
     },
   },
-  // Indicar que es una SPA para que Vite sirva index.html en rutas no encontradas
   appType: 'spa',
 })

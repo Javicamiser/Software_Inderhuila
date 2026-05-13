@@ -1,462 +1,274 @@
 import { useState, useRef } from "react";
 import { HistoriaClinicaData } from "../HistoriaClinica";
-import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2, FlaskConical, ScanLine, Activity, Dumbbell, AlertCircle, Search, File, Paperclip } from "lucide-react";
+import { Upload, X, Plus, Trash2, FlaskConical, ScanLine, Activity, Dumbbell, AlertCircle, Search, File, Paperclip } from "lucide-react";
 import { buscarProcedimientoPorCodigo, buscarCodigosPorNombre, formatearCodigoCUPS } from "./cupsDatabase";
-
 
 const T = {
   primary:'#1F4788', primaryLight:'#EEF3FB',
   surface:'#ffffff', surfaceAlt:'#f8fafc',
   border:'#e2e8f0', borderLight:'#f1f5f9',
   textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
-  danger:'#ef4444', dangerBg:'#fef2f2',
+  danger:'#ef4444', dangerBg:'#fee2e2',
   success:'#10b981', successBg:'#f0fdf4',
   radius:'12px', radiusSm:'8px',
 };
 
+// Colores suaves por categoría — paleta consistente
+const CATEGORIA_COLORS: Record<string, { color:string; bg:string; border:string; Icon: any }> = {
+  "Laboratorios":       { color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe', Icon: FlaskConical },
+  "Imágenes":           { color:'#1d4ed8', bg:'#eff6ff', border:'#bfdbfe', Icon: ScanLine     },
+  "Pruebas Funcionales":{ color:'#065f46', bg:'#f0fdf4', border:'#a7f3d0', Icon: Activity     },
+  "Pruebas Deportivas": { color:'#9a3412', bg:'#fff7ed', border:'#fed7aa', Icon: Dumbbell     },
+  "Procedimientos":     { color:'#1e40af', bg:'#eff6ff', border:'#bfdbfe', Icon: Activity     },
+};
+const getCategoria = (cat: string) => CATEGORIA_COLORS[cat] ?? { color:T.textSecondary, bg:T.surfaceAlt, border:T.border, Icon: Activity };
 
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  onCancel?: () => void;
+  onNext: () => void; onPrevious: () => void; onCancel?: () => void;
 };
 
-const getCategoriaIcon = (categoria: string) => {
-  switch (categoria) {
-    case "Laboratorios":
-      return { Icon: FlaskConical, color: "text-purple-600", bgColor: "bg-purple-50" };
-    case "Imágenes":
-      return { Icon: ScanLine, color: "text-blue-600", bgColor: "bg-blue-50" };
-    case "Pruebas Funcionales":
-      return { Icon: Activity, color: "text-green-600", bgColor: "bg-green-50" };
-    case "Pruebas Deportivas":
-      return { Icon: Dumbbell, color: "text-orange-600", bgColor: "bg-orange-50" };
-    case "Procedimientos":
-      return { Icon: Activity, color: "text-indigo-600", bgColor: "bg-indigo-50" };
-    default:
-      return { Icon: Activity, color: "text-gray-600", bgColor: "bg-gray-50" };
-  }
-};
+const inputStyle: React.CSSProperties = { width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, outline:'none', boxSizing:'border-box', background:T.surface };
+const textareaStyle: React.CSSProperties = { ...inputStyle, resize:'vertical', fontFamily:'inherit' };
+
+const Campo = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <label style={{ display:'block', marginBottom:5, fontSize:12, fontWeight:600, color:T.textSecondary }}>{label}</label>
+    {children}
+  </div>
+);
 
 export function PruebasComplementarias({ data, updateData, onNext, onPrevious }: Props) {
-  const [codigoCUPS, setCodigoCUPS] = useState("");
-  const [nombreProcedimiento, setNombreProcedimiento] = useState("");
-  const [categoriaProcedimiento, setCategoriaProcedimiento] = useState("");
-  const [resultado, setResultado] = useState("");
-  const [errorCodigoCUPS, setErrorCodigoCUPS] = useState("");
-  const [sugerenciasCUPS, setSugerenciasCUPS] = useState<Array<{ codigo: string; nombre: string; categoria: string }>>([]);
-  const [mostrarSugerenciasCUPS, setMostrarSugerenciasCUPS] = useState(false);
-  const [archivosSeleccionados, setArchivosSeleccionados] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [codigoCUPS,     setCodigoCUPS]     = useState("");
+  const [nombreProc,     setNombreProc]     = useState("");
+  const [categoriaProc,  setCategoriaProc]  = useState("");
+  const [resultado,      setResultado]      = useState("");
+  const [errCUPS,        setErrCUPS]        = useState("");
+  const [sugerencias,    setSugerencias]    = useState<Array<{codigo:string;nombre:string;categoria:string}>>([]);
+  const [showSug,        setShowSug]        = useState(false);
+  const [archivos,       setArchivos]       = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // Buscar automáticamente por código CUPS
-  const handleCodigoCUPSChange = (codigo: string) => {
-    const codigoLimpio = codigo.trim().replace(/\D/g, ""); // Solo números
-    setCodigoCUPS(codigoLimpio);
-    setErrorCodigoCUPS("");
-
-    if (codigoLimpio.length >= 3) {
-      const procedimiento = buscarProcedimientoPorCodigo(codigoLimpio);
-      if (procedimiento) {
-        setNombreProcedimiento(procedimiento.nombre);
-        setCategoriaProcedimiento(procedimiento.categoria);
-        setErrorCodigoCUPS("");
-      } else {
-        setErrorCodigoCUPS("Código CUPS no encontrado");
-        setNombreProcedimiento("");
-        setCategoriaProcedimiento("");
-      }
-    } else {
-      setNombreProcedimiento("");
-      setCategoriaProcedimiento("");
-    }
+  const handleCodigo = (v: string) => {
+    const c = v.trim().replace(/\D/g,""); setCodigoCUPS(c); setErrCUPS("");
+    if (c.length >= 3) {
+      const p = buscarProcedimientoPorCodigo(c);
+      if (p) { setNombreProc(p.nombre); setCategoriaProc(p.categoria); }
+      else    { setErrCUPS("Código CUPS no encontrado"); setNombreProc(""); setCategoriaProc(""); }
+    } else { setNombreProc(""); setCategoriaProc(""); }
   };
 
-  // Buscar automáticamente por nombre de procedimiento
-  const handleNombreProcedimientoChange = (nombre: string) => {
-    setNombreProcedimiento(nombre);
-    setErrorCodigoCUPS("");
-
-    if (nombre.trim() && nombre.length >= 3) {
-      const resultados = buscarCodigosPorNombre(nombre);
-      if (resultados.length > 0) {
-        setSugerenciasCUPS(resultados);
-        setMostrarSugerenciasCUPS(true);
-      } else {
-        // Permitir escribir procedimiento personalizado
-        setCodigoCUPS("");
-        setCategoriaProcedimiento("");
-        setSugerenciasCUPS([]);
-        setMostrarSugerenciasCUPS(false);
-      }
-    } else {
-      setSugerenciasCUPS([]);
-      setMostrarSugerenciasCUPS(false);
-    }
+  const handleNombre = (v: string) => {
+    setNombreProc(v); setErrCUPS("");
+    if (v.trim().length >= 3) {
+      const r = buscarCodigosPorNombre(v);
+      if (r.length > 0) { setSugerencias(r); setShowSug(true); }
+      else              { setCodigoCUPS(""); setCategoriaProc(""); setSugerencias([]); setShowSug(false); }
+    } else { setSugerencias([]); setShowSug(false); }
   };
 
-  // Seleccionar una sugerencia de la lista
-  const seleccionarSugerenciaCUPS = (codigo: string, nombre: string, categoria: string) => {
-    setCodigoCUPS(codigo);
-    setNombreProcedimiento(nombre);
-    setCategoriaProcedimiento(categoria);
-    setMostrarSugerenciasCUPS(false);
-    setSugerenciasCUPS([]);
-    setErrorCodigoCUPS("");
+  const seleccionar = (codigo: string, nombre: string, categoria: string) => {
+    setCodigoCUPS(codigo); setNombreProc(nombre); setCategoriaProc(categoria);
+    setSugerencias([]); setShowSug(false); setErrCUPS("");
   };
 
-  // Manejar selección de archivos
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
-      setArchivosSeleccionados([...archivosSeleccionados, ...newFiles]);
-    }
-  };
-
-  // Eliminar archivo seleccionado
-  const eliminarArchivoSeleccionado = (index: number) => {
-    setArchivosSeleccionados(archivosSeleccionados.filter((_, i) => i !== index));
-  };
-
-  const handleAgregarPrueba = () => {
-    if (!nombreProcedimiento.trim()) {
-      alert("Busque y seleccione un procedimiento o escriba el nombre de la prueba");
-      return;
-    }
-
-    const nuevaPrueba = {
-      categoria: categoriaProcedimiento || "Sin categoría",
-      nombrePrueba: nombreProcedimiento.trim(),
-      codigoCUPS: codigoCUPS,
-      resultado: resultado,
-      archivosAdjuntos: archivosSeleccionados,
-    };
-
-    updateData({
-      ayudasDiagnosticas: [...data.ayudasDiagnosticas, nuevaPrueba],
-    });
-
-    // Limpiar campos
-    setCodigoCUPS("");
-    setNombreProcedimiento("");
-    setCategoriaProcedimiento("");
-    setResultado("");
-    setErrorCodigoCUPS("");
-    setSugerenciasCUPS([]);
-    setMostrarSugerenciasCUPS(false);
-    setArchivosSeleccionados([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleEliminarPrueba = (index: number) => {
-    const updated = data.ayudasDiagnosticas.filter((_, i) => i !== index);
-    updateData({ ayudasDiagnosticas: updated });
-  };
-
-  // Eliminar archivo de una prueba existente
-  const handleEliminarArchivoPrueba = (indexPrueba: number, indexArchivo: number) => {
-    const pruebasActualizadas = data.ayudasDiagnosticas.map((prueba, i) => {
-      if (i === indexPrueba) {
-        return {
-          ...prueba,
-          archivosAdjuntos: prueba.archivosAdjuntos.filter((_, j) => j !== indexArchivo),
-        };
-      }
-      return prueba;
-    });
-    updateData({ ayudasDiagnosticas: pruebasActualizadas });
+  const agregar = () => {
+    if (!nombreProc.trim()) { alert("Escriba el nombre del procedimiento"); return; }
+    updateData({ ayudasDiagnosticas: [...data.ayudasDiagnosticas, {
+      categoria: categoriaProc || "Sin categoría",
+      nombrePrueba: nombreProc.trim(),
+      codigoCUPS, resultado,
+      archivosAdjuntos: archivos,
+    }]});
+    setCodigoCUPS(""); setNombreProc(""); setCategoriaProc(""); setResultado("");
+    setErrCUPS(""); setSugerencias([]); setShowSug(false); setArchivos([]);
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-[#C84F3B]/10 to-[#1F4788]/10 p-4 rounded-lg border-l-4 border-[#C84F3B]">
-        <p className="text-sm text-gray-700">
-          <span className="font-semibold">Ayudas diagnósticas:</span> Busque el procedimiento mediante código CUPS o por nombre.
-          El sistema identificará automáticamente el tipo de prueba. Este campo es opcional y se completa solo si se requieren exámenes adicionales.
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+
+      {/* Info */}
+      <div style={{ padding:'11px 15px', background:T.primaryLight, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.primary}`, borderRadius:T.radiusSm }}>
+        <p style={{ margin:0, fontSize:13, color:T.textPrimary }}>
+          <strong>Ayudas diagnósticas:</strong> Busque el procedimiento por código CUPS o por nombre. Campo opcional — complete solo si se requieren exámenes adicionales.
         </p>
       </div>
 
-      {/* Formulario para agregar ayuda diagnóstica */}
-      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-        <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <Search className="w-5 h-5 text-[#C84F3B]" />
-          Buscar Ayuda Diagnóstica
-        </h3>
-        
-        <div className="space-y-4">
-          {/* Código CUPS - Sistema de búsqueda */}
-          <div className="relative">
-            <label className="block mb-2 text-sm font-medium text-gray-700">
-              Código CUPS
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={codigoCUPS}
-                onChange={(e) => handleCodigoCUPSChange(e.target.value)}
+      {/* Formulario */}
+      <div style={{ border:`1px solid ${T.border}`, borderRadius:T.radius, overflow:'hidden' }}>
+        <div style={{ padding:'13px 18px', background:T.surfaceAlt, borderBottom:`1px solid ${T.borderLight}`, display:'flex', alignItems:'center', gap:8 }}>
+          <Search size={15} style={{ color:T.primary }}/>
+          <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.textPrimary }}>Buscar Ayuda Diagnóstica</h3>
+        </div>
+        <div style={{ padding:'18px', display:'flex', flexDirection:'column', gap:14 }}>
+
+          {/* Código CUPS */}
+          <Campo label="Código CUPS">
+            <div style={{ position:'relative' }}>
+              <input value={codigoCUPS} onChange={e => handleCodigo(e.target.value)}
                 placeholder="Ej: 902201, 890201, 990101..."
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errorCodigoCUPS ? "border-red-300" : "border-gray-300"
-                }`}
-              />
-              <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                style={{ ...inputStyle, borderColor: errCUPS ? T.danger : T.border }}/>
+              <Search size={14} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:T.textMuted }}/>
             </div>
-            {errorCodigoCUPS && (
-              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                <span>{errorCodigoCUPS}</span>
-              </p>
-            )}
-            {codigoCUPS && nombreProcedimiento && !errorCodigoCUPS && (
-              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-sm text-green-700">
-                  <span className="font-semibold">✓ Procedimiento encontrado:</span> {nombreProcedimiento}
-                </p>
-                <p className="text-xs text-green-600 mt-1">
-                  <span className="font-semibold">Tipo:</span> {categoriaProcedimiento}
-                </p>
+            {errCUPS && (
+              <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, fontSize:11, color:T.danger, background:T.dangerBg, padding:'5px 8px', borderRadius:T.radiusSm }}>
+                <AlertCircle size={11}/> {errCUPS}
               </div>
             )}
-          </div>
+            {codigoCUPS && nombreProc && !errCUPS && (
+              <div style={{ marginTop:7, padding:'8px 12px', background:T.successBg, border:`1px solid #a7f3d0`, borderRadius:T.radiusSm }}>
+                <p style={{ margin:0, fontSize:12, color:'#065f46' }}><strong>✓ Encontrado:</strong> {nombreProc}</p>
+                <p style={{ margin:'2px 0 0', fontSize:11, color:'#065f46' }}><strong>Tipo:</strong> {categoriaProc}</p>
+              </div>
+            )}
+          </Campo>
 
           {/* Divisor */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 border-t border-gray-300"></div>
-            <span className="text-sm text-gray-500 font-medium">O buscar por nombre</span>
-            <div className="flex-1 border-t border-gray-300"></div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ flex:1, borderTop:`1px solid ${T.border}` }}/>
+            <span style={{ fontSize:12, color:T.textMuted, fontWeight:500 }}>O buscar por nombre</span>
+            <div style={{ flex:1, borderTop:`1px solid ${T.border}` }}/>
           </div>
 
-          {/* Búsqueda por nombre del procedimiento */}
-          <div className="relative">
-            <label className="block mb-2 text-sm font-medium text-gray-700">
-              Nombre del procedimiento
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={nombreProcedimiento}
-                onChange={(e) => handleNombreProcedimientoChange(e.target.value)}
-                onBlur={() => {
-                  // Retraso para permitir clic en sugerencias
-                  setTimeout(() => setMostrarSugerenciasCUPS(false), 200);
-                }}
-                onFocus={() => {
-                  if (sugerenciasCUPS.length > 0) {
-                    setMostrarSugerenciasCUPS(true);
-                  }
-                }}
+          {/* Nombre procedimiento */}
+          <Campo label="Nombre del procedimiento">
+            <div style={{ position:'relative' }}>
+              <input value={nombreProc} onChange={e => handleNombre(e.target.value)}
+                onBlur={() => setTimeout(() => setShowSug(false), 200)}
+                onFocus={() => sugerencias.length > 0 && setShowSug(true)}
                 placeholder="Ej: Hemograma, Ecografía, Radiografía..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
-            </div>
-            
-            {/* Lista de sugerencias */}
-            {mostrarSugerenciasCUPS && sugerenciasCUPS.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                {sugerenciasCUPS.map((sugerencia) => {
-                  const { Icon, color, bgColor } = getCategoriaIcon(sugerencia.categoria);
-                  return (
-                    <button
-                      type="button"
-                      key={sugerencia.codigo}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                      onClick={() => seleccionarSugerenciaCUPS(sugerencia.codigo, sugerencia.nombre, sugerencia.categoria)}
-                    >
-                      <div className="flex items-start gap-3">
-                        <Icon className={`w-4 h-4 ${color} mt-0.5 flex-shrink-0`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-gray-800 font-medium">{sugerencia.nombre}</div>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`text-xs ${color} px-2 py-0.5 ${bgColor} rounded`}>
-                              {sugerencia.categoria}
-                            </span>
-                            <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                              {formatearCodigoCUPS(sugerencia.codigo)}
-                            </span>
+                style={inputStyle}/>
+              <Search size={14} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:T.textMuted }}/>
+
+              {showSug && sugerencias.length > 0 && (
+                <div style={{ position:'absolute', zIndex:20, background:T.surface, border:`1px solid ${T.primary}`, borderRadius:T.radiusSm, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', maxHeight:240, overflowY:'auto', marginTop:4, width:'100%' }}>
+                  {sugerencias.map(s => {
+                    const cat = getCategoria(s.categoria);
+                    return (
+                      <button key={s.codigo} type="button" onClick={() => seleccionar(s.codigo, s.nombre, s.categoria)}
+                        style={{ width:'100%', padding:'9px 12px', background:'transparent', border:'none', borderBottom:`1px solid ${T.borderLight}`, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'flex-start', gap:10 }}>
+                        <cat.Icon size={14} style={{ color:cat.color, flexShrink:0, marginTop:2 }}/>
+                        <div style={{ flex:1 }}>
+                          <p style={{ margin:0, fontSize:12, fontWeight:600, color:T.textPrimary }}>{s.nombre}</p>
+                          <div style={{ display:'flex', gap:6, marginTop:3 }}>
+                            <span style={{ fontSize:10, fontWeight:600, color:cat.color, background:cat.bg, padding:'1px 6px', borderRadius:20 }}>{s.categoria}</span>
+                            <span style={{ fontSize:10, fontFamily:'monospace', fontWeight:700, color:T.primary, background:T.primaryLight, padding:'1px 6px', borderRadius:20 }}>CUPS: {formatearCodigoCUPS(s.codigo)}</span>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            
-            <p className="text-xs text-gray-500 mt-1">
-              Escriba al menos 3 caracteres para buscar. También puede escribir un procedimiento personalizado.
-            </p>
-          </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <p style={{ margin:'4px 0 0', fontSize:11, color:T.textMuted }}>Escriba al menos 3 caracteres para buscar. También puede escribir un procedimiento personalizado.</p>
+          </Campo>
 
-          {/* Tipo de prueba detectado */}
-          {categoriaProcedimiento && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-sm text-blue-700">
-                <span className="font-semibold">Tipo de prueba:</span> {categoriaProcedimiento}
-              </p>
+          {/* Categoría detectada */}
+          {categoriaProc && (
+            <div style={{ padding:'8px 12px', background:T.primaryLight, border:`1px solid ${T.border}`, borderRadius:T.radiusSm }}>
+              <p style={{ margin:0, fontSize:12, color:T.primary }}><strong>Tipo de prueba:</strong> {categoriaProc}</p>
             </div>
           )}
 
           {/* Resultado */}
-          <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700">
-              Resultado / Observaciones
-            </label>
-            <textarea
-              value={resultado}
-              onChange={(e) => setResultado(e.target.value)}
-              rows={3}
+          <Campo label="Resultado / Observaciones">
+            <textarea value={resultado} rows={3} onChange={e => setResultado(e.target.value)}
               placeholder="Describa los resultados o hallazgos relevantes de la prueba..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
+              style={textareaStyle}/>
+          </Campo>
 
-          {/* Adjuntar archivos */}
-          <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700 flex items-center gap-2">
-              <Paperclip className="w-4 h-4" />
-              Adjuntar archivos (opcional)
-            </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-md p-4 text-center hover:border-blue-400 transition-colors">
-              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <label className="cursor-pointer">
-                <span className="text-blue-600 hover:text-blue-700 font-medium text-sm">Seleccionar archivos</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.jpg,.jpeg,.png,.dcm"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-              <p className="text-xs text-gray-500 mt-1">
-                Formatos: PDF, JPG, PNG, DICOM
-              </p>
+          {/* Archivos */}
+          <Campo label="Adjuntar archivos (opcional)">
+            <div style={{ border:`2px dashed ${T.border}`, borderRadius:T.radiusSm, padding:'20px 16px', textAlign:'center', cursor:'pointer', background:T.surfaceAlt }}
+              onClick={() => fileRef.current?.click()}>
+              <Upload size={24} style={{ color:T.textMuted, margin:'0 auto 8px' }}/>
+              <p style={{ margin:0, fontSize:13, color:T.primary, fontWeight:600 }}>Seleccionar archivos</p>
+              <p style={{ margin:'3px 0 0', fontSize:11, color:T.textMuted }}>Formatos: PDF, JPG, PNG, DICOM</p>
+              <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.dcm"
+                onChange={e => e.target.files && setArchivos([...archivos, ...Array.from(e.target.files)])}
+                style={{ display:'none' }}/>
             </div>
-
-            {/* Archivos seleccionados para esta prueba */}
-            {archivosSeleccionados.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs font-medium text-gray-700">Archivos seleccionados:</p>
-                {archivosSeleccionados.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-md px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <File className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                      <span className="text-sm text-gray-700 truncate">{file.name}</span>
-                      <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+            {archivos.length > 0 && (
+              <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:5 }}>
+                {archivos.map((f, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 10px', background:T.primaryLight, border:`1px solid ${T.border}`, borderRadius:T.radiusSm }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flex:1, minWidth:0 }}>
+                      <File size={13} style={{ color:T.primary, flexShrink:0 }}/>
+                      <span style={{ fontSize:12, color:T.textPrimary, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</span>
+                      <span style={{ fontSize:11, color:T.textMuted, flexShrink:0 }}>({(f.size/1024).toFixed(1)} KB)</span>
                     </div>
-                    <button
-                      onClick={() => eliminarArchivoSeleccionado(index)}
-                      className="text-red-500 hover:text-red-700 ml-2 flex-shrink-0"
-                      type="button"
-                      title="Eliminar archivo"
-                    >
-                      <X className="w-4 h-4" />
+                    <button onClick={() => setArchivos(archivos.filter((_,j) => j!==i))} type="button"
+                      style={{ padding:4, background:T.dangerBg, border:'none', borderRadius:T.radiusSm, cursor:'pointer', color:T.danger, flexShrink:0, marginLeft:6 }}>
+                      <X size={12}/>
                     </button>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Campo>
 
           {/* Botón agregar */}
-          <button
-            type="button"
-            onClick={handleAgregarPrueba}
-            className="w-full flex items-center justify-center gap-2 bg-[#C84F3B] text-white py-2 px-4 rounded-md hover:bg-[#B23600] transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            Agregar Ayuda Diagnóstica
+          <button type="button" onClick={agregar}
+            style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'11px 16px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Plus size={15}/> Agregar Ayuda Diagnóstica
           </button>
         </div>
       </div>
 
-      {/* Lista de ayudas diagnósticas agregadas */}
+      {/* Lista */}
       {data.ayudasDiagnosticas.length > 0 && (
         <div>
-          <h3 className="font-semibold text-gray-800 mb-3">Ayudas Diagnósticas Registradas</h3>
-          <div className="space-y-3">
-            {data.ayudasDiagnosticas.map((prueba, index) => {
-              const { Icon, color, bgColor } = getCategoriaIcon(prueba.categoria);
-
+          <p style={{ margin:'0 0 10px', fontSize:13, fontWeight:700, color:T.textPrimary }}>Ayudas Diagnósticas Registradas</p>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {data.ayudasDiagnosticas.map((p, i) => {
+              const cat = getCategoria(p.categoria);
               return (
-                <div
-                  key={index}
-                  className={`${bgColor} p-4 rounded-lg border border-gray-200`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-3 flex-1">
-                      <Icon className={`w-5 h-5 ${color} mt-0.5`} />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-xs font-medium ${color} px-2 py-0.5 bg-white rounded`}>
-                            {prueba.categoria}
-                          </span>
-                          {prueba.codigoCUPS && (
-                            <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                              CUPS: {formatearCodigoCUPS(prueba.codigoCUPS)}
-                            </span>
-                          )}
+                <div key={i} style={{ background:cat.bg, border:`1px solid ${cat.border}`, borderLeft:`3px solid ${cat.color}`, borderRadius:T.radiusSm, padding:'14px 16px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', gap:10, flex:1 }}>
+                      <cat.Icon size={16} style={{ color:cat.color, flexShrink:0, marginTop:2 }}/>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:5 }}>
+                          <span style={{ fontSize:11, fontWeight:600, color:cat.color, background:`${cat.color}15`, padding:'2px 8px', borderRadius:20 }}>{p.categoria}</span>
+                          {p.codigoCUPS && <span style={{ fontSize:11, fontFamily:'monospace', fontWeight:700, color:T.primary, background:T.primaryLight, padding:'2px 8px', borderRadius:20 }}>CUPS: {formatearCodigoCUPS(p.codigoCUPS)}</span>}
                         </div>
-                        <p className="font-medium text-gray-800 mt-2">
-                          {prueba.nombrePrueba}
-                        </p>
-                        {prueba.resultado && (
-                          <p className="text-sm text-gray-600 mt-2 bg-white/50 p-2 rounded">
-                            <span className="font-medium">Resultado:</span> {prueba.resultado}
+                        <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.textPrimary }}>{p.nombrePrueba}</p>
+                        {p.resultado && (
+                          <p style={{ margin:'6px 0 0', fontSize:12, color:T.textSecondary, background:'rgba(255,255,255,0.6)', padding:'6px 9px', borderRadius:T.radiusSm }}>
+                            <strong>Resultado:</strong> {p.resultado}
                           </p>
+                        )}
+                        {p.archivosAdjuntos?.length > 0 && (
+                          <div style={{ marginTop:8, paddingTop:8, borderTop:`1px solid ${cat.border}` }}>
+                            <p style={{ margin:'0 0 5px', fontSize:11, fontWeight:600, color:T.textMuted, display:'flex', alignItems:'center', gap:4 }}>
+                              <Paperclip size={11}/> {p.archivosAdjuntos.length} archivo(s) adjunto(s)
+                            </p>
+                            {p.archivosAdjuntos.map((a, j) => (
+                              <div key={j} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.radiusSm, marginBottom:3 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:5, flex:1, minWidth:0 }}>
+                                  <File size={11} style={{ color:T.primary, flexShrink:0 }}/>
+                                  <span style={{ fontSize:11, color:T.textPrimary, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
+                                </div>
+                                <button type="button" onClick={() => {
+                                  const updated = data.ayudasDiagnosticas.map((pr, pi) => pi===i ? { ...pr, archivosAdjuntos: pr.archivosAdjuntos.filter((_,aj) => aj!==j) } : pr);
+                                  updateData({ ayudasDiagnosticas: updated });
+                                }} style={{ padding:3, background:T.dangerBg, border:'none', borderRadius:4, cursor:'pointer', color:T.danger, flexShrink:0, marginLeft:5 }}>
+                                  <X size={11}/>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleEliminarPrueba(index)}
-                      className="ml-3 p-1.5 text-red-500 hover:bg-blue-50 rounded transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
+                    <button type="button" onClick={() => updateData({ ayudasDiagnosticas: data.ayudasDiagnosticas.filter((_,j) => j!==i) })}
+                      style={{ padding:6, background:T.dangerBg, border:'none', borderRadius:T.radiusSm, cursor:'pointer', color:T.danger, flexShrink:0, marginLeft:10 }}>
+                      <Trash2 size={13}/>
                     </button>
                   </div>
-
-                  {/* Archivos adjuntos de esta prueba */}
-                  {prueba.archivosAdjuntos && prueba.archivosAdjuntos.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1">
-                        <Paperclip className="w-3 h-3" />
-                        Archivos adjuntos ({prueba.archivosAdjuntos.length}):
-                      </p>
-                      <div className="space-y-1.5">
-                        {prueba.archivosAdjuntos.map((archivo, archivoIndex) => (
-                          <div
-                            key={archivoIndex}
-                            className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-1.5"
-                          >
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <File className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                              <span className="text-xs text-gray-700 truncate">{archivo.name}</span>
-                              <span className="text-xs text-gray-500">({(archivo.size / 1024).toFixed(1)} KB)</span>
-                            </div>
-                            <button
-                              onClick={() => handleEliminarArchivoPrueba(index, archivoIndex)}
-                              className="text-red-500 hover:text-red-700 ml-2 flex-shrink-0"
-                              type="button"
-                              title="Eliminar archivo"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -465,14 +277,10 @@ export function PruebasComplementarias({ data, updateData, onNext, onPrevious }:
       )}
 
       {data.ayudasDiagnosticas.length === 0 && (
-        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-          <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 italic">
-            No se han registrado ayudas diagnósticas
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Este campo es opcional. Agregue solo si se solicitaron o realizaron pruebas.
-          </p>
+        <div style={{ textAlign:'center', padding:'32px 0', background:T.surfaceAlt, border:`1px dashed ${T.border}`, borderRadius:T.radius }}>
+          <Activity size={32} style={{ color:T.textMuted, margin:'0 auto 10px', display:'block', opacity:0.4 }}/>
+          <p style={{ margin:0, fontSize:13, color:T.textMuted, fontStyle:'italic' }}>No se han registrado ayudas diagnósticas</p>
+          <p style={{ margin:'4px 0 0', fontSize:11, color:T.textMuted }}>Campo opcional — agregue solo si se solicitaron pruebas.</p>
         </div>
       )}
 

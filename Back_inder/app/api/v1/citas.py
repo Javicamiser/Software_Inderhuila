@@ -1,116 +1,274 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
-from app.schemas.cita import CitaCreate, CitaUpdate, CitaResponse
-from app.schemas.deportista import DeportistaResponse
-from app.models.deportista import Deportista
-from app.crud.cita import (
-    crear_cita,
-    listar_citas,
-    listar_citas_por_deportista,
-    obtener_cita,
-    actualizar_cita,
-    eliminar_cita,
-    obtener_deportistas_con_citas_hoy,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+from uuid import UUID
+from typing import Optional, List
+from datetime import date, time
+from pydantic import BaseModel
 
-router = APIRouter(tags=["citas"])
+from app.core.dependencies import get_db, get_current_user
+from app.models.cita import Cita
+from app.models.usuario import Usuario
+from app.models.catalogo import CatalogoItem
 
-def get_db():
-    db = SessionLocal()
+router = APIRouter(tags=["Citas"])
+
+
+# ── Schemas ──────────────────────────────────────────────────
+class CitaCreate(BaseModel):
+    deportista_id:  UUID
+    medico_id:      Optional[UUID] = None          # ← NUEVO
+    fecha:          date
+    hora:           str                            # "HH:MM"
+    tipo_cita_id:   UUID
+    estado_cita_id: UUID
+    observaciones:  Optional[str] = None
+
+class CitaUpdate(BaseModel):
+    medico_id:      Optional[UUID] = None
+    fecha:          Optional[date] = None
+    hora:           Optional[str] = None
+    tipo_cita_id:   Optional[UUID] = None
+    estado_cita_id: Optional[UUID] = None
+    observaciones:  Optional[str] = None
+
+
+def _serializar(c: Cita) -> dict:
+    return {
+        "id":             str(c.id),
+        "deportista_id":  str(c.deportista_id),
+        "medico_id":      str(c.medico_id) if c.medico_id else None,
+        "fecha":          str(c.fecha),
+        "hora":           str(c.hora),
+        "tipo_cita_id":   str(c.tipo_cita_id),
+        "estado_cita_id": str(c.estado_cita_id),
+        "observaciones":  c.observaciones,
+        "tipo_cita":      {"nombre": c.tipo_cita.nombre}  if c.tipo_cita  else None,
+        "estado_cita":    {"nombre": c.estado_cita.nombre} if c.estado_cita else None,
+        "deportista": {
+            "id":               str(c.deportista.id),
+            "nombres":          c.deportista.nombres,
+            "apellidos":        c.deportista.apellidos,
+            "numero_documento": c.deportista.numero_documento,
+        } if c.deportista else None,
+        "medico": {
+            "id":              str(c.medico.id),
+            "nombre_completo": getattr(c.medico, "nombre_completo", None)
+                               or f"{getattr(c.medico,'nombres','')} {getattr(c.medico,'apellidos','')}".strip(),
+        } if c.medico else None,
+    }
+
+
+def _cargar(db: Session, cita_id):
+    return db.query(Cita).options(
+        joinedload(Cita.tipo_cita),
+        joinedload(Cita.estado_cita),
+        joinedload(Cita.deportista),
+        joinedload(Cita.medico),
+    ).filter(Cita.id == cita_id).first()
+
+
+# ── Rutas estáticas primero ───────────────────────────────────
+
+@router.get("/hoy")
+def citas_hoy(db: Session = Depends(get_db)):
+    """Deportistas con citas agendadas para hoy."""
+    from app.models.deportista import Deportista
+    hoy = date.today()
+    rows = db.query(Cita).options(
+        joinedload(Cita.tipo_cita),
+        joinedload(Cita.estado_cita),
+        joinedload(Cita.deportista),
+        joinedload(Cita.medico),
+    ).filter(Cita.fecha == hoy).order_by(Cita.hora).all()
+    return [_serializar(c) for c in rows]
+
+
+@router.get("/agenda")
+def agenda_medico(
+    medico_id: UUID = Query(..., description="ID del médico"),
+    fecha:     date = Query(..., description="Fecha a consultar (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Devuelve los slots del médico en la fecha indicada.
+    Cada slot indica si está libre u ocupado.
+    Usado en GestionCitas al seleccionar médico + fecha.
+    """
+    # Horas de atención: 07:00 - 17:00 cada 30 min
+    from datetime import datetime, timedelta
+    inicio   = datetime.strptime("07:00", "%H:%M")
+    fin      = datetime.strptime("17:00", "%H:%M")
+    delta    = timedelta(minutes=30)
+    todos_slots = []
+    cur = inicio
+    while cur < fin:
+        todos_slots.append(cur.strftime("%H:%M"))
+        cur += delta
+
+    # Citas ya agendadas para ese médico en esa fecha
+    ocupadas = db.query(Cita).options(
+        joinedload(Cita.deportista),
+        joinedload(Cita.tipo_cita),
+        joinedload(Cita.estado_cita),
+    ).filter(
+        and_(Cita.medico_id == medico_id, Cita.fecha == fecha)
+    ).all()
+
+    ocupadas_map = {str(c.hora)[:5]: c for c in ocupadas}
+
+    slots = []
+    for hora in todos_slots:
+        cita = ocupadas_map.get(hora)
+        slots.append({
+            "hora":    hora,
+            "libre":   cita is None,
+            "cita": {
+                "id":         str(cita.id),
+                "deportista": f"{cita.deportista.nombres} {cita.deportista.apellidos}" if cita.deportista else "—",
+                "tipo":       cita.tipo_cita.nombre if cita.tipo_cita else "—",
+                "estado":     cita.estado_cita.nombre if cita.estado_cita else "—",
+            } if cita else None,
+        })
+
+    return {
+        "medico_id": str(medico_id),
+        "fecha":     str(fecha),
+        "slots":     slots,
+        "ocupados":  len(ocupadas),
+        "libres":    len(todos_slots) - len(ocupadas),
+    }
+
+
+@router.get("/medicos")
+def listar_medicos(db: Session = Depends(get_db)):
+    """Lista de usuarios con rol médico/profesional para el selector de citas."""
+    medicos = db.query(Usuario).options(
+        joinedload(Usuario.rol)
+    ).filter(
+        Usuario.activo == True
+    ).order_by(Usuario.nombre_completo).all()
+
+    return [
+        {
+            "id":              str(u.id),
+            "nombre_completo": getattr(u, "nombre_completo", None)
+                               or f"{getattr(u,'nombres','')} {getattr(u,'apellidos','')}".strip(),
+            "rol":             u.rol.nombre if u.rol else None,
+            "email":           getattr(u, "email", None),
+        }
+        for u in medicos
+    ]
+
+
+# ── CRUD general ──────────────────────────────────────────────
+
+@router.get("/")
+def listar(
+    page:      int = 1,
+    page_size: int = 20,
+    medico_id: Optional[UUID] = None,
+    fecha:     Optional[date] = None,
+    db: Session = Depends(get_db),
+):
+    q = db.query(Cita).options(
+        joinedload(Cita.tipo_cita),
+        joinedload(Cita.estado_cita),
+        joinedload(Cita.deportista),
+        joinedload(Cita.medico),
+    )
+    if medico_id:
+        q = q.filter(Cita.medico_id == medico_id)
+    if fecha:
+        q = q.filter(Cita.fecha == fecha)
+    total  = q.count()
+    citas  = q.order_by(Cita.fecha, Cita.hora).offset((page - 1) * page_size).limit(page_size).all()
+    return {"total": total, "page": page, "items": [_serializar(c) for c in citas]}
+
+
+@router.post("/", status_code=201)
+def crear(
+    data: CitaCreate,
+    db:   Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    # Si no se especifica médico, asignar al usuario logueado
+    medico_id = data.medico_id or current_user.id
+
+    # Verificar conflicto de horario para ese médico
+    conflicto = db.query(Cita).filter(
+        and_(
+            Cita.medico_id == medico_id,
+            Cita.fecha     == data.fecha,
+            Cita.hora      == data.hora,
+        )
+    ).first()
+    if conflicto:
+        raise HTTPException(
+            status_code=409,
+            detail=f"El médico ya tiene una cita agendada a las {data.hora} el {data.fecha}"
+        )
+
     try:
-        yield db
-    finally:
-        db.close()
+        hora_obj = time.fromisoformat(data.hora)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Formato de hora inválido, use HH:MM")
 
-# RUTAS ESPECÍFICAS PRIMERO (antes de las rutas con parámetros)
+    cita = Cita(
+        deportista_id  = data.deportista_id,
+        medico_id      = medico_id,                # ← asignado
+        fecha          = data.fecha,
+        hora           = hora_obj,
+        tipo_cita_id   = data.tipo_cita_id,
+        estado_cita_id = data.estado_cita_id,
+        observaciones  = data.observaciones,
+    )
+    db.add(cita)
+    db.commit()
+    db.refresh(cita)
+    return _serializar(_cargar(db, cita.id))
 
-@router.get("/deportistas-con-citas-hoy")
-def deportistas_con_citas_hoy(db: Session = Depends(get_db)):
-    """Obtener deportistas que tienen citas agendadas para hoy con información de las citas"""
-    try:
-        from datetime import date
-        from app.models.cita import Cita
-        
-        hoy = date.today()
-        
-        # Obtener deportistas con sus citas para hoy
-        deportistas_con_citas = db.query(Deportista, Cita).join(
-            Cita, Cita.deportista_id == Deportista.id
-        ).filter(
-            Cita.fecha == hoy
-        ).all()
-        
-        resultado = []
-        for d, cita in deportistas_con_citas:
-            dep_dict = {
-                "id": str(d.id),
-                "tipo_documento_id": str(d.tipo_documento_id),
-                "numero_documento": d.numero_documento,
-                "nombres": d.nombres,
-                "apellidos": d.apellidos,
-                "fecha_nacimiento": d.fecha_nacimiento.isoformat() if d.fecha_nacimiento else None,
-                "sexo_id": str(d.sexo_id) if d.sexo_id else None,
-                "telefono": d.telefono,
-                "email": d.email,
-                "direccion": d.direccion,
-                "tipo_deporte": d.tipo_deporte,
-                "estado_id": str(d.estado_id),
-                "created_at": d.created_at.isoformat() if d.created_at else None,
-                # Información de la cita
-                "cita_hora": cita.hora if cita.hora else None,
-                "cita_tipo": cita.tipo_cita.nombre if cita.tipo_cita else "No especificado",
-                "cita_deporte": d.tipo_deporte if d.tipo_deporte else "No especificado",
-                "cita_estado": cita.estado_cita.nombre if cita.estado_cita else "Pendiente",
-            }
-            resultado.append(dep_dict)
-        
-        return resultado
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error al obtener deportistas: {str(e)}")
 
-@router.post("/", response_model=CitaResponse, status_code=201)
-def crear(data: CitaCreate, db: Session = Depends(get_db)):
-    """Crear una nueva cita"""
-    try:
-        return crear_cita(db, data)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error al crear cita: {str(e)}")
+@router.get("/deportista/{deportista_id}")
+def por_deportista(deportista_id: UUID, db: Session = Depends(get_db)):
+    citas = db.query(Cita).options(
+        joinedload(Cita.tipo_cita),
+        joinedload(Cita.estado_cita),
+        joinedload(Cita.deportista),
+        joinedload(Cita.medico),
+    ).filter(Cita.deportista_id == deportista_id).order_by(Cita.fecha, Cita.hora).all()
+    return [_serializar(c) for c in citas]
 
-@router.get("/", response_model=list[CitaResponse])
-def listar(page: int = 1, page_size: int = 10, db: Session = Depends(get_db)):
-    """Listar todas las citas"""
-    skip = (page - 1) * page_size
-    return listar_citas(db, skip, page_size)
 
-# RUTAS CON PARÁMETROS
-
-@router.get("/deportista/{deportista_id}", response_model=list[CitaResponse])
-def listar_por_deportista(deportista_id: str, db: Session = Depends(get_db)):
-    """Obtener citas de un deportista específico"""
-    return listar_citas_por_deportista(db, deportista_id)
-
-@router.get("/{cita_id}", response_model=CitaResponse)
-def obtener(cita_id: str, db: Session = Depends(get_db)):
-    """Obtener una cita por su ID"""
-    cita = obtener_cita(db, cita_id)
-    if not cita:
+@router.get("/{cita_id}")
+def obtener(cita_id: UUID, db: Session = Depends(get_db)):
+    c = _cargar(db, cita_id)
+    if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-    return cita
+    return _serializar(c)
 
-@router.put("/{cita_id}", response_model=CitaResponse)
-def actualizar(cita_id: str, data: CitaUpdate, db: Session = Depends(get_db)):
-    """Actualizar una cita"""
-    cita = actualizar_cita(db, cita_id, data)
-    if not cita:
+
+@router.patch("/{cita_id}")
+def actualizar(cita_id: UUID, data: CitaUpdate, db: Session = Depends(get_db)):
+    c = db.query(Cita).filter(Cita.id == cita_id).first()
+    if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-    return cita
+
+    if data.medico_id   is not None: c.medico_id      = data.medico_id
+    if data.fecha        is not None: c.fecha          = data.fecha
+    if data.hora         is not None: c.hora           = time.fromisoformat(data.hora)
+    if data.tipo_cita_id is not None: c.tipo_cita_id   = data.tipo_cita_id
+    if data.estado_cita_id is not None: c.estado_cita_id = data.estado_cita_id
+    if data.observaciones is not None: c.observaciones = data.observaciones
+
+    db.commit()
+    return _serializar(_cargar(db, cita_id))
+
 
 @router.delete("/{cita_id}", status_code=204)
-def eliminar(cita_id: str, db: Session = Depends(get_db)):
-    """Eliminar una cita"""
-    success = eliminar_cita(db, cita_id)
-    if not success:
+def eliminar(cita_id: UUID, db: Session = Depends(get_db)):
+    c = db.query(Cita).filter(Cita.id == cita_id).first()
+    if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+    db.delete(c)
+    db.commit()

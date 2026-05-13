@@ -3,8 +3,9 @@ import { Search, Calendar, FileText, Plus, Clock } from 'lucide-react';
 import { deportistasService, citasService, historiaClinicaService } from '@/app/services/apiClient';
 import type { Deportista } from '@/app/services/apiClient';
 
+interface CitaInfo { tipo_cita?: { nombre: string }; id?: string; }
 interface SelectDeportistaProps {
-  onSelect: (deportista: Deportista) => void;
+  onSelect: (deportista: Deportista, cita?: CitaInfo) => void;
   onBack?: () => void;
 }
 
@@ -12,6 +13,7 @@ interface DeportistaEnriquecido extends Deportista {
   tieneHistoria: boolean;
   historiaId?: string;
   tieneCitaHoy?: boolean;
+  citaHoy?: CitaInfo;
 }
 
 export const SelectDeportista: React.FC<SelectDeportistaProps> = ({ onSelect, onBack }) => {
@@ -46,7 +48,12 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({ onSelect, on
         const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`;
         const citas = await citasService.getAll();
         const arr: any[] = Array.isArray(citas) ? citas : (citas as any)?.items ?? [];
-        const deHoy = arr.filter((c: any) => (c.fecha ?? '').split('T')[0] === hoy);
+        const deHoy = arr.filter((c: any) => {
+          const fechaMatch = (c.fecha ?? '').split('T')[0] === hoy;
+          const estadoNombre = c.estado_cita?.nombre?.toLowerCase() ?? '';
+          const noAtendida = estadoNombre !== 'atendida' && estadoNombre !== 'cancelada';
+          return fechaMatch && noAtendida;
+        });
         const ids = [...new Set(deHoy.map((c: any) => c.deportista_id).filter(Boolean))] as string[];
 
         const deps = await Promise.all(
@@ -54,7 +61,8 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({ onSelect, on
             try {
               const dep = await deportistasService.getById(id);
               const enr = await enriquecer(dep);
-              return { ...enr, tieneCitaHoy: true };
+              const citaDep = deHoy.find((c: any) => c.deportista_id === id);
+              return { ...enr, tieneCitaHoy: true, citaHoy: citaDep };
             } catch { return null; }
           })
         );
@@ -86,7 +94,7 @@ export const SelectDeportista: React.FC<SelectDeportistaProps> = ({ onSelect, on
 
   const DeportistaCard = ({ dep }: { dep: DeportistaEnriquecido }) => (
     <button
-      onClick={() => onSelect(dep)}
+      onClick={() => onSelect(dep, dep.citaHoy)}
       style={{
         display: 'flex', alignItems: 'center', gap: 14,
         padding: '12px 16px', background: '#fff',

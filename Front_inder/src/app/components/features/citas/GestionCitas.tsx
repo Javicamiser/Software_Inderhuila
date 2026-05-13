@@ -1,671 +1,361 @@
-import { useState, useEffect } from "react";
-import { Calendar, dateFnsLocalizer } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
-import { es } from "date-fns/locale";
-import { Plus, X, Calendar as CalendarIcon, User, Clock, Stethoscope, Trash2, Badge } from "lucide-react";
-import { toast } from "sonner";
-import "react-big-calendar/lib/css/react-big-calendar.css";
-import "@/styles/calendar.css";
-import { citasService } from "@/app/services/apiClient";
-import { useCatalogos } from "@/app/hooks/useCatalogos";
+// ============================================================
+// GESTIÓN DE CITAS — WAP Enterprise SAS / INDERHUILA
+// ============================================================
+import { useState, useEffect, useCallback } from 'react';
+import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import { format, parse, startOfWeek, getDay, isSameDay } from 'date-fns';
+import { es } from 'date-fns/locale';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { toast } from 'sonner';
+import { Plus, X } from 'lucide-react';
+import { api, deportistasService } from '@/app/services/apiClient';
+import { useCatalogos } from '@/app/hooks/customHooks';
 
-// Configurar react-big-calendar con date-fns
-const locales = {
-  es: es,
+const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales: { es } });
+
+const T = {
+  primary:      '#1F4788',
+  primaryLight: '#EEF3FB',
+  surface:      '#ffffff',
+  surfaceAlt:   '#f8fafc',
+  border:       '#e2e8f0',
+  borderLight:  '#f1f5f9',
+  textPrimary:  '#0f172a',
+  textSecondary:'#475569',
+  textMuted:    '#94a3b8',
+  radius:       '12px',
+  radiusSm:     '8px',
+  shadow:       '0 1px 3px rgba(0,0,0,0.06)',
+  shadowMd:     '0 4px 16px rgba(31,71,136,0.08)',
 };
 
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  locales,
-});
-
-type Cita = {
-  id: string;
-  deportista_id: string;
-  deportista?: {
-    nombre: string;
-    apellido: string;
-  };
-  fecha: string;
-  hora: string;
-  tipo_cita_id: string;
-  tipo_cita?: {
-    nombre: string;
-  };
-  estado_cita_id: string;
-  estado_cita?: {
-    nombre: string;
-  };
+interface Medico { id: string; nombre_completo: string; rol: string | null; email: string | null; }
+interface Slot { hora: string; libre: boolean; cita?: { id: string; deportista: string; tipo: string; estado: string } | null; }
+interface Cita {
+  id: string; deportista_id: string; medico_id: string | null;
+  fecha: string; hora: string; tipo_cita_id: string; estado_cita_id: string;
   observaciones?: string;
-  created_at?: string;
-};
+  tipo_cita?: { nombre: string }; estado_cita?: { nombre: string };
+  deportista?: { id: string; nombres: string; apellidos: string; numero_documento: string };
+  medico?: { id: string; nombre_completo: string } | null;
+}
+interface Deportista { id: string; nombres: string; apellidos: string; numero_documento: string; }
 
-type FormData = {
-  deportista_id: string;
-  fecha: string;
-  hora: string;
-  tipo_cita_id: string;
-  estado_cita_id: string;
-  observaciones: string;
-};
-
-type Deportista = {
-  id: string;
-  nombres: string;
-  apellidos: string;
-  numero_documento: string;
+const colorEstado = (e?: string) => {
+  if (!e) return { bg: '#F1F5F9', text: '#475569' };
+  const l = e.toLowerCase();
+  if (l.includes('program'))  return { bg: '#FEF9C3', text: '#854D0E' };
+  if (l.includes('confirm'))  return { bg: '#D1FAE5', text: '#065F46' };
+  if (l.includes('atenid') || l.includes('realiz')) return { bg: '#DBEAFE', text: '#1E40AF' };
+  if (l.includes('cancel'))   return { bg: '#FEE2E2', text: '#991B1B' };
+  if (l.includes('present'))  return { bg: '#FFEDD5', text: '#9A3412' };
+  return { bg: '#F1F5F9', text: '#475569' };
 };
 
 export function GestionCitas() {
-  const { tiposCita, estadosCita, loading: loadingCatalogos } = useCatalogos();
-  const [citas, setCitas] = useState<Cita[]>([]);
+  const { tiposCita, estadosCita } = useCatalogos();
+  const [citas,        setCitas]        = useState<Cita[]>([]);
+  const [medicos,      setMedicos]      = useState<Medico[]>([]);
+  const [loading,      setLoading]      = useState(true);
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingCitas, setIsLoadingCitas] = useState(true);
-  const [isLoadingDeportistas, setIsLoadingDeportistas] = useState(false);
-  const [deportistasBuscados, setDeportistasBuscados] = useState<Deportista[]>([]);
-  const [nombreBusqueda, setNombreBusqueda] = useState("");
+  const [guardando,    setGuardando]    = useState(false);
+  const [busqueda,     setBusqueda]     = useState('');
+  const [resultados,   setResultados]   = useState<Deportista[]>([]);
+  const [buscando,     setBuscando]     = useState(false);
   const [deportistaSeleccionado, setDeportistaSeleccionado] = useState<Deportista | null>(null);
-  const [formData, setFormData] = useState<FormData>({
-    deportista_id: "",
-    fecha: "",
-    hora: "",
-    tipo_cita_id: "",
-    estado_cita_id: "",
-    observaciones: "",
+  const [slots,         setSlots]         = useState<Slot[]>([]);
+  const [cargandoSlots, setCargandoSlots] = useState(false);
+  const [formData, setFormData] = useState({
+    medico_id: '', fecha: '', hora: '', tipo_cita_id: '', estado_cita_id: '', observaciones: '',
   });
 
-  // Cargar citas al montar el componente
-  useEffect(() => {
-    console.log("🔧 GestionCitas mounted, inicializando listener...");
-    cargarCitas();
-    
-    // Método 1: Escuchar evento custom
-    const handleCitasActualizadas = (event: Event) => {
-      console.log("📅 ✅ Evento 'citasActualizadas' recibido!", event);
-      console.log("📅 Citas actualizadas, recargando lista...");
-      cargarCitas();
-    };
-    
-    // Método 2: Escuchar cambios en localStorage
-    const handleStorageChange = (e: StorageEvent) => {
-      console.log("💾 Storage event recibido:", e.key, "=", e.newValue);
-      if (e.key === 'citasActualizadas_timestamp') {
-        console.log("💾 ✅ Cambio detectado en citasActualizadas_timestamp, recargando citas...");
-        cargarCitas();
-      }
-    };
-    
-    console.log("🔧 Agregando listeners...");
-    window.addEventListener('citasActualizadas', handleCitasActualizadas as EventListener);
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      console.log("🔧 Removiendo listeners...");
-      window.removeEventListener('citasActualizadas', handleCitasActualizadas as EventListener);
-      window.removeEventListener('storage', handleStorageChange);
-    };
+  const cargarCitas = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res  = await api.get('/citas/');
+      const data = res.data;
+      setCitas(Array.isArray(data) ? data : data.items || []);
+    } catch { toast.error('Error cargando citas'); }
+    finally { setLoading(false); }
   }, []);
 
-  const cargarCitas = async () => {
+  const cargarMedicos = useCallback(async () => {
     try {
-      console.log("📅 Iniciando cargarCitas()...");
-      setIsLoadingCitas(true);
-      const response = await citasService.getAll(1, 100);
-      console.log("📅 Respuesta de citasService.getAll():", response);
-      // Respuesta puede ser un array o un objeto con estructura paginada
-      const citasData = Array.isArray(response) ? response : response.items || [];
-      console.log("📅 Citas procesadas:", citasData);
-      console.log("📅 Primera cita con estado:", citasData[0]?.estado_cita);
-      setCitas((citasData || []) as Cita[]);
-      console.log("📅 ✅ setCitas llamado, estado actualizado");
-    } catch (error) {
-      console.error("Error al cargar citas:", error);
-      toast.error("Error al cargar las citas");
-    } finally {
-      setIsLoadingCitas(false);
-    }
-  };
+      const res = await api.get('/citas/medicos');
+      setMedicos(res.data || []);
+    } catch { console.warn('No se pudieron cargar los médicos'); }
+  }, []);
 
-  const handleAbrirModal = () => {
+  useEffect(() => { cargarCitas(); cargarMedicos(); }, [cargarCitas, cargarMedicos]);
+
+  // Usa deportistasService.search — axios con token automático
+  useEffect(() => {
+    if (busqueda.length < 2) { setResultados([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        setBuscando(true);
+        const data = await deportistasService.search(busqueda);
+        setResultados(Array.isArray(data) ? data : []);
+      } catch { setResultados([]); }
+      finally { setBuscando(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  useEffect(() => {
+    if (!formData.medico_id || !formData.fecha) { setSlots([]); return; }
+    const cargar = async () => {
+      try {
+        setCargandoSlots(true);
+        const res = await api.get('/citas/agenda', { params: { medico_id: formData.medico_id, fecha: formData.fecha } });
+        setSlots(res.data.slots || []);
+      } catch { setSlots([]); }
+      finally { setCargandoSlots(false); }
+    };
+    cargar();
+  }, [formData.medico_id, formData.fecha]);
+
+  const abrirModal = () => {
+    setFormData({ medico_id: '', fecha: format(new Date(), 'yyyy-MM-dd'), hora: '', tipo_cita_id: tiposCita?.[0]?.id || '', estado_cita_id: estadosCita?.[0]?.id || '', observaciones: '' });
+    setDeportistaSeleccionado(null); setBusqueda(''); setResultados([]); setSlots([]);
     setModalAbierto(true);
   };
 
-  const handleCerrarModal = () => {
-    setModalAbierto(false);
-    setFormData({
-      deportista_id: "",
-      fecha: "",
-      hora: "",
-      tipo_cita_id: "",
-      estado_cita_id: "",
-      observaciones: "",
-    });
-    setNombreBusqueda("");
-    setDeportistaSeleccionado(null);
-    setDeportistasBuscados([]);
-  };
-
-  const handleBuscarDeportista = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value;
-    setNombreBusqueda(valor);
-
-    if (valor.trim().length < 2) {
-      setDeportistasBuscados([]);
-      setFormData({ ...formData, deportista_id: "" });
-      setDeportistaSeleccionado(null);
-      return;
-    }
-
+  const guardar = async () => {
+    if (!deportistaSeleccionado) { toast.error('Selecciona un deportista'); return; }
+    if (!formData.fecha)          { toast.error('Selecciona una fecha'); return; }
+    if (!formData.hora)           { toast.error('Selecciona una hora'); return; }
+    if (!formData.tipo_cita_id)   { toast.error('Selecciona el tipo de cita'); return; }
+    if (!formData.estado_cita_id) { toast.error('Selecciona el estado'); return; }
     try {
-      setIsLoadingDeportistas(true);
-      const response = await fetch(
-        `http://localhost:8000/api/v1/deportistas/search?q=${encodeURIComponent(valor)}`
-      );
-      if (response.ok) {
-        const datos = await response.json();
-        setDeportistasBuscados(datos);
-      } else {
-        setDeportistasBuscados([]);
-      }
-    } catch (error) {
-      console.error("Error al buscar deportista:", error);
-      setDeportistasBuscados([]);
-    } finally {
-      setIsLoadingDeportistas(false);
-    }
-  };
-
-  const handleSeleccionarDeportista = (deportista: Deportista) => {
-    setDeportistaSeleccionado(deportista);
-    setFormData({ ...formData, deportista_id: deportista.id });
-    setDeportistasBuscados([]);
-    setNombreBusqueda("");
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.deportista_id || !formData.fecha || !formData.hora) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Mapear los nombres de los tipos de cita a sus IDs
-      const tipoCitaSeleccionada = tiposCita.find((t) => t.nombre === formData.tipo_cita_id);
-      const estadoCitaSeleccionado = estadosCita.find((e) => e.nombre === formData.estado_cita_id);
-
-      if (!tipoCitaSeleccionada || !estadoCitaSeleccionado) {
-        toast.error("Error: Tipo de cita o estado no válido");
-        return;
-      }
-
-      const datosEnvio = {
-        deportista_id: formData.deportista_id,
-        fecha: formData.fecha,
-        hora: formData.hora,
-        tipo_cita_id: tipoCitaSeleccionada.id,
-        estado_cita_id: estadoCitaSeleccionado.id,
-        observaciones: formData.observaciones,
-      };
-
-      const nuevaCita = await citasService.create(datosEnvio);
-
-      setCitas([...citas, nuevaCita as Cita]);
-      handleCerrarModal();
-      toast.success("Cita agendada correctamente");
-    } catch (error) {
-      console.error("Error al agendar cita:", error);
-      toast.error("Error al agendar la cita");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEliminar = async (citaId: string) => {
-    if (!confirm("¿Está seguro que desea eliminar esta cita?")) {
-      return;
-    }
-
-    try {
-      await citasService.delete(citaId);
-      setCitas(citas.filter((c) => c.id !== citaId));
-      toast.success("Cita eliminada correctamente");
-    } catch (error) {
-      console.error("Error al eliminar cita:", error);
-      toast.error("Error al eliminar la cita");
-    }
-  };
-
-  // Obtener citas de la semana actual
-  const hoy = new Date();
-  const inicioSemana = startOfWeek(hoy, { weekStartsOn: 1 });
-  const finSemana = addDays(inicioSemana, 6);
-
-  const citasSemanaActual = citas.filter((cita) => {
-    try {
-      const fechaCita = new Date(`${cita.fecha}T${cita.hora}`);
-      return isWithinInterval(fechaCita, {
-        start: startOfDay(inicioSemana),
-        end: endOfDay(finSemana),
+      setGuardando(true);
+      await api.post('/citas/', {
+        deportista_id: deportistaSeleccionado.id, medico_id: formData.medico_id || null,
+        fecha: formData.fecha, hora: formData.hora, tipo_cita_id: formData.tipo_cita_id,
+        estado_cita_id: formData.estado_cita_id, observaciones: formData.observaciones || null,
       });
-    } catch {
-      return false;
-    }
+      toast.success('Cita agendada correctamente');
+      setModalAbierto(false); cargarCitas();
+    } catch (e: any) { toast.error(e?.response?.data?.detail || 'Error al guardar la cita'); }
+    finally { setGuardando(false); }
+  };
+
+  const eventos = citas.map(c => {
+    const [h, m] = c.hora.split(':').map(Number);
+    const start  = new Date(c.fecha + 'T00:00:00'); start.setHours(h, m);
+    const end    = new Date(start); end.setMinutes(end.getMinutes() + 30);
+    return { id: c.id, title: `${c.deportista?.nombres || ''} ${c.deportista?.apellidos || ''}`, start, end, resource: c };
   });
 
-  // Convertir citas para react-big-calendar
-  const eventos = citas
-    .map((cita) => {
-      try {
-        const fechaHora = new Date(`${cita.fecha}T${cita.hora}`);
-        const nombreDeportista = cita.deportista
-          ? `${cita.deportista.nombre} ${cita.deportista.apellido}`
-          : "Deportista";
-
-        return {
-          id: cita.id,
-          title: nombreDeportista,
-          start: fechaHora,
-          end: new Date(fechaHora.getTime() + 60 * 60 * 1000),
-          resource: cita,
-        };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean) as any[];
-
-  const eventStyleGetter = (event: any) => {
-    const cita = event.resource as Cita;
-    let backgroundColor = "#1F4788"; // azul por defecto
-
-    if (cita.tipo_cita_id?.includes("primera")) backgroundColor = "#C84F3B";
-    else if (cita.tipo_cita_id?.includes("novedad")) backgroundColor = "#B8C91A";
-
-    return {
-      style: {
-        backgroundColor,
-        borderRadius: "5px",
-        opacity: 0.9,
-        color: "white",
-        border: "0px",
-        display: "block",
-      },
-    };
+  const eventStyle = (ev: any) => {
+    const { bg, text } = colorEstado(ev.resource?.estado_cita?.nombre);
+    return { style: { backgroundColor: bg, color: text, borderRadius: 6, border: 'none', fontSize: 12, padding: '2px 6px' } };
   };
 
-  const getEstadoColor = (estado?: string) => {
-    if (!estado) return 'bg-gray-100 text-gray-700';
-    const lower = estado.toLowerCase();
-    if (lower === 'programada') return 'bg-yellow-100 text-yellow-700';
-    if (lower === 'confirmada') return 'bg-green-100 text-green-700';
-    if (lower === 'cancelada') return 'bg-red-100 text-red-700';
-    if (lower === 'realizada') return 'bg-blue-100 text-blue-700';
-    if (lower === 'no presentó') return 'bg-orange-100 text-orange-700';
-    return 'bg-gray-100 text-gray-700';
-  };
+  const hoy = new Date();
+  const inicioSemana = startOfWeek(hoy, { weekStartsOn: 1 });
+  const finSemana = new Date(inicioSemana); finSemana.setDate(finSemana.getDate() + 6);
+  const citasSemana = citas
+    .filter(c => { const f = new Date(c.fecha + 'T12:00:00'); return f >= inicioSemana && f <= finSemana; })
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
 
-  if (isLoadingCitas) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando citas...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: `3px solid ${T.primaryLight}`, borderTopColor: T.primary, animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>Cargando citas...</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: T.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', border: `1px solid ${T.border}`, borderRadius: T.radiusSm, fontSize: 14, outline: 'none', boxSizing: 'border-box' };
+  const selectStyle: React.CSSProperties = { ...inputStyle, background: T.surface };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 0 40px' }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} .rbc-event{border-radius:6px!important;}`}</style>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 className="text-3xl font-bold text-blue-600">Gestión de Citas</h1>
-          <p className="text-gray-600 mt-1">Agenda y consulta las citas médicas de los deportistas</p>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.primary }}>Gestión de Citas</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: T.textMuted }}>Agenda y consulta las citas médicas de los deportistas</p>
         </div>
-        <button
-          onClick={handleAbrirModal}
-          className="px-6 py-3 bg-primary text-white rounded-lg hover:opacity-90 transition-all flex items-center gap-2"
-          style={{ backgroundColor: "#C84F3B" }}
-        >
-          <Plus className="w-5 h-5" />
-          Agendar Cita
+        <button onClick={abrirModal} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: T.primary, color: '#fff', border: 'none', borderRadius: T.radiusSm, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <Plus size={16} /> Agendar Cita
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendario */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-800">Calendario de Citas</h2>
-          <div style={{ height: "600px" }}>
-            <Calendar
-              localizer={localizer}
-              events={eventos}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: "100%" }}
-              messages={{
-                next: "Siguiente",
-                previous: "Anterior",
-                today: "Hoy",
-                month: "Mes",
-                week: "Semana",
-                day: "Día",
-                agenda: "Agenda",
-                date: "Fecha",
-                time: "Hora",
-                event: "Evento",
-                noEventsInRange: "No hay citas en este rango",
-                showMore: (total: number) => `+ Ver más (${total})`,
-              }}
-              culture="es"
-              eventPropGetter={eventStyleGetter}
-            />
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+        <div style={{ background: T.surface, borderRadius: T.radius, border: `1px solid ${T.border}`, padding: 20, boxShadow: T.shadow }}>
+          <Calendar localizer={localizer} events={eventos} startAccessor="start" endAccessor="end" style={{ height: 560 }} culture="es" eventPropGetter={eventStyle}
+            messages={{ next: 'Sig.', previous: 'Ant.', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día', agenda: 'Agenda', date: 'Fecha', time: 'Hora', event: 'Cita', noEventsInRange: 'Sin citas', showMore: (n: number) => `+${n} más` }} />
         </div>
 
-        {/* Lista de citas de la semana */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="mb-4 text-lg font-semibold text-gray-800">Citas de esta semana</h2>
-          
-          {console.log("🎨 Renderizando lista de citas. Total:", citas.length, "En semana:", citasSemanaActual.length)}
-          {console.log("📋 Primera cita en semana:", citasSemanaActual[0]?.estado_cita?.nombre)}
-
-          {citasSemanaActual.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <CalendarIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No hay citas agendadas</p>
-              <p className="text-sm">para esta semana</p>
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[580px] overflow-y-auto pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
-              {citasSemanaActual
-                .sort(
-                  (a, b) =>
-                    new Date(`${a.fecha}T${a.hora}`).getTime() -
-                    new Date(`${b.fecha}T${b.hora}`).getTime()
-                )
-                .map((cita) => {
-                  const nombreDeportista = cita.deportista
-                    ? `${cita.deportista.nombre} ${cita.deportista.apellido}`
-                    : "Deportista";
-                  const fechaCita = new Date(`${cita.fecha}T${cita.hora}`);
-
-                  return (
-                    <div
-                      key={cita.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:border-blue-400 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2 flex-1">
-                          <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-sm font-medium text-gray-900 truncate">
-                            {nombreDeportista}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleEliminar(cita.id)}
-                          className="p-1 hover:bg-red-50 rounded transition-colors text-gray-400 hover:text-red-500"
-                          title="Eliminar cita"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="w-4 h-4 flex-shrink-0" />
-                          <span>
-                            {format(fechaCita, "EEEE d 'de' MMMM", { locale: es })}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 flex-shrink-0" />
-                          <span>{format(fechaCita, "HH:mm")} hrs</span>
-                        </div>
-                        {cita.tipo_cita?.nombre && (
-                          <div className="flex items-center gap-2">
-                            <Stethoscope className="w-4 h-4 flex-shrink-0" />
-                            <span>{cita.tipo_cita.nombre}</span>
-                          </div>
-                        )}
-                        {cita.estado_cita?.nombre && (
-                          <div className="flex items-center gap-2">
-                            <Badge className="w-4 h-4 flex-shrink-0" />
-                            <span
-                              className={`text-xs font-semibold px-2 py-1 rounded-full ${getEstadoColor(
-                                cita.estado_cita.nombre
-                              )}`}
-                            >
-                              {cita.estado_cita.nombre}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {cita.observaciones && (
-                        <p className="text-xs text-gray-500 mt-2 italic">
-                          "{cita.observaciones}"
-                        </p>
-                      )}
+        <div style={{ background: T.surface, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.borderLight}`, background: T.surfaceAlt }}>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: T.textPrimary }}>Citas esta semana</h2>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textMuted }}>{citasSemana.length} cita{citasSemana.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div style={{ maxHeight: 540, overflowY: 'auto' }}>
+            {citasSemana.length === 0 ? (
+              <p style={{ padding: 20, fontSize: 13, color: T.textMuted, fontStyle: 'italic', margin: 0 }}>Sin citas esta semana</p>
+            ) : citasSemana.map(c => {
+              const { bg, text } = colorEstado(c.estado_cita?.nombre);
+              const esHoy = isSameDay(new Date(c.fecha + 'T12:00:00'), hoy);
+              return (
+                <div key={c.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${T.borderLight}`, background: esHoy ? T.primaryLight : T.surface }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: T.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {c.deportista?.nombres} {c.deportista?.apellidos}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textMuted }}>
+                        {format(new Date(c.fecha + 'T12:00:00'), 'EEE d MMM', { locale: es })} · {c.hora.slice(0, 5)}
+                      </p>
+                      {c.medico && <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSecondary }}>Dr. {c.medico.nombre_completo}</p>}
                     </div>
-                  );
-                })}
-            </div>
-          )}
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 12, background: bg, color: text, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {c.estado_cita?.nombre || '—'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Modal para agendar cita */}
       {modalAbierto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Agendar Nueva Cita</h2>
-              <button
-                onClick={handleCerrarModal}
-                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15,23,42,0.55)' }} onClick={() => setModalAbierto(false)}>
+          <div style={{ background: T.surface, borderRadius: T.radius, width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+
+            <div style={{ background: T.primary, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Nueva Cita</h3>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Completa los datos para agendar</p>
+              </div>
+              <button onClick={() => setModalAbierto(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', display: 'flex' }}><X size={18} /></button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Seleccionar deportista por nombre */}
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Deportista */}
               <div>
-                <label htmlFor="deportista" className="block mb-2 text-gray-700 font-medium">
-                  Deportista <span className="text-red-500">*</span>
-                </label>
-                
-                {!deportistaSeleccionado ? (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="deportista"
-                      value={nombreBusqueda}
-                      onChange={handleBuscarDeportista}
-                      placeholder="Escribe el nombre del deportista..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required={!formData.deportista_id}
-                    />
-                    
-                    {/* Dropdown de resultados */}
-                    {nombreBusqueda.length >= 2 && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
-                        {isLoadingDeportistas ? (
-                          <div className="p-3 text-center text-gray-500">Buscando...</div>
-                        ) : deportistasBuscados.length > 0 ? (
-                          <ul className="max-h-64 overflow-y-auto">
-                            {deportistasBuscados.map((deportista) => (
-                              <li key={deportista.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSeleccionarDeportista(deportista)}
-                                  className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                                >
-                                  <div className="font-medium text-gray-900">
-                                    {deportista.nombres} {deportista.apellidos}
-                                  </div>
-                                  <div className="text-xs text-gray-600">
-                                    Doc: {deportista.numero_documento}
-                                  </div>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="p-3 text-center text-gray-500">
-                            No se encontraron deportistas
-                          </div>
-                        )}
-                      </div>
-                    )}
+                <label style={labelStyle}>Deportista *</label>
+                {deportistaSeleccionado ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: T.primaryLight, borderRadius: T.radiusSm, border: '1px solid #BFDBFE' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.primary }}>{deportistaSeleccionado.nombres} {deportistaSeleccionado.apellidos}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textMuted }}>Doc: {deportistaSeleccionado.numero_documento}</p>
+                    </div>
+                    <button onClick={() => { setDeportistaSeleccionado(null); setBusqueda(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted }}><X size={16} /></button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {deportistaSeleccionado.nombres} {deportistaSeleccionado.apellidos}
+                  <div style={{ position: 'relative' }}>
+                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre o documento..." style={inputStyle} />
+                    {resultados.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.radiusSm, boxShadow: T.shadowMd, zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
+                        {resultados.map(d => (
+                          <button key={d.id}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { setDeportistaSeleccionado(d); setBusqueda(''); setResultados([]); }}
+                            style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${T.borderLight}` }}>
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: T.textPrimary }}>{d.nombres} {d.apellidos}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textMuted }}>Doc: {d.numero_documento}</p>
+                          </button>
+                        ))}
                       </div>
-                      <div className="text-sm text-gray-600">
-                        Doc: {deportistaSeleccionado.numero_documento}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDeportistaSeleccionado(null);
-                        setFormData({ ...formData, deportista_id: "" });
-                        setNombreBusqueda("");
-                      }}
-                      className="ml-auto p-1 hover:bg-blue-200 rounded transition-colors"
-                    >
-                      <X className="w-4 h-4 text-gray-600" />
-                    </button>
+                    )}
+                    {buscando && <p style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>Buscando...</p>}
                   </div>
                 )}
               </div>
 
-              {/* Tipo de cita */}
+              {/* Médico */}
               <div>
-                <label htmlFor="tipoCita" className="block mb-2 text-gray-700 font-medium">
-                  Tipo de Cita <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="tipoCita"
-                  value={formData.tipo_cita_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tipo_cita_id: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                  disabled={loadingCatalogos}
-                >
-                  <option value="">Seleccionar tipo de cita...</option>
-                  {tiposCita.map((tipo) => (
-                    <option key={tipo.id} value={tipo.nombre}>
-                      {tipo.nombre}
-                    </option>
-                  ))}
+                <label style={labelStyle}>Médico / Profesional</label>
+                <select value={formData.medico_id} onChange={e => setFormData(f => ({ ...f, medico_id: e.target.value, hora: '' }))} style={selectStyle}>
+                  <option value="">— Sin asignar —</option>
+                  {medicos.map(m => <option key={m.id} value={m.id}>{m.nombre_completo}{m.rol ? ` (${m.rol})` : ''}</option>)}
                 </select>
               </div>
 
-              {/* Fecha */}
-              <div>
-                <label htmlFor="fecha" className="block mb-2 text-gray-700 font-medium">
-                  Fecha <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  id="fecha"
-                  value={formData.fecha}
-                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+              {/* Fecha y hora */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Fecha *</label>
+                  <input type="date" value={formData.fecha} onChange={e => setFormData(f => ({ ...f, fecha: e.target.value, hora: '' }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Hora *</label>
+                  <input type="time" value={formData.hora} onChange={e => setFormData(f => ({ ...f, hora: e.target.value }))} style={inputStyle} />
+                </div>
               </div>
 
-              {/* Hora */}
-              <div>
-                <label htmlFor="hora" className="block mb-2 text-gray-700 font-medium">
-                  Hora <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  id="hora"
-                  value={formData.hora}
-                  onChange={(e) => setFormData({ ...formData, hora: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+              {/* Disponibilidad */}
+              {(formData.medico_id && formData.fecha) && (
+                <div>
+                  <label style={labelStyle}>Disponibilidad del médico</label>
+                  {cargandoSlots ? (
+                    <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Cargando agenda...</p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 6 }}>
+                      {slots.map(slot => (
+                        <button key={slot.hora} disabled={!slot.libre}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => slot.libre && setFormData(f => ({ ...f, hora: slot.hora }))}
+                          title={!slot.libre && slot.cita ? `${slot.cita.deportista} — ${slot.cita.tipo}` : slot.hora}
+                          style={{ padding: '8px 4px', borderRadius: T.radiusSm, textAlign: 'center', fontSize: 12, fontWeight: formData.hora === slot.hora ? 700 : 500, cursor: slot.libre ? 'pointer' : 'not-allowed',
+                            border: `1.5px solid ${formData.hora === slot.hora ? T.primary : slot.libre ? T.border : '#FCA5A5'}`,
+                            background: formData.hora === slot.hora ? T.primaryLight : slot.libre ? T.surface : '#FEF2F2',
+                            color: formData.hora === slot.hora ? T.primary : slot.libre ? T.textSecondary : '#DC2626' }}>
+                          {slot.hora}
+                          <div style={{ fontSize: 9, marginTop: 2, opacity: 0.75 }}>{slot.libre ? '✓ libre' : '✗ ocup.'}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* Estado de cita */}
-              <div>
-                <label htmlFor="estadoCita" className="block mb-2 text-gray-700 font-medium">
-                  Estado de Cita
-                </label>
-                <select
-                  id="estadoCita"
-                  value={formData.estado_cita_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, estado_cita_id: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={loadingCatalogos}
-                >
-                  <option value="">Seleccionar estado...</option>
-                  {estadosCita.map((estado) => (
-                    <option key={estado.id} value={estado.nombre}>
-                      {estado.nombre}
-                    </option>
-                  ))}
-                </select>
+              {/* Tipo y estado */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Tipo de cita *</label>
+                  <select value={formData.tipo_cita_id} onChange={e => setFormData(f => ({ ...f, tipo_cita_id: e.target.value }))} style={selectStyle}>
+                    <option value="">Seleccionar...</option>
+                    {tiposCita?.map((t: any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Estado *</label>
+                  <select value={formData.estado_cita_id} onChange={e => setFormData(f => ({ ...f, estado_cita_id: e.target.value }))} style={selectStyle}>
+                    <option value="">Seleccionar...</option>
+                    {estadosCita?.map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* Observaciones */}
               <div>
-                <label htmlFor="observaciones" className="block mb-2 text-gray-700 font-medium">
-                  Observaciones
-                </label>
-                <textarea
-                  id="observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) =>
-                    setFormData({ ...formData, observaciones: e.target.value })
-                  }
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  placeholder="Notas adicionales sobre la cita..."
-                />
+                <label style={labelStyle}>Observaciones</label>
+                <textarea value={formData.observaciones} onChange={e => setFormData(f => ({ ...f, observaciones: e.target.value }))}
+                  rows={3} placeholder="Notas adicionales..."
+                  style={{ ...inputStyle, resize: 'vertical' }} />
               </div>
 
-              {/* Botones */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCerrarModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-all font-medium disabled:opacity-50"
-                  style={{ backgroundColor: "#C84F3B" }}
-                >
-                  {isLoading ? "Agendando..." : "Agendar Cita"}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8, borderTop: `1px solid ${T.borderLight}` }}>
+                <button onClick={() => setModalAbierto(false)} style={{ padding: '10px 20px', background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: T.radiusSm, fontSize: 14, cursor: 'pointer', color: T.textSecondary }}>Cancelar</button>
+                <button onClick={guardar} disabled={guardando} style={{ padding: '10px 24px', background: T.primary, color: '#fff', border: 'none', borderRadius: T.radiusSm, fontSize: 14, fontWeight: 600, cursor: guardando ? 'not-allowed' : 'pointer', opacity: guardando ? 0.7 : 1 }}>
+                  {guardando ? 'Guardando...' : 'Agendar Cita'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+export default GestionCitas;

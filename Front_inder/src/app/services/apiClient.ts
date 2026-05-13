@@ -1,7 +1,5 @@
 // ============================================================
 // API CLIENT — único punto de entrada al backend
-// Todos los servicios viven aquí. Ningún componente hace
-// fetch/axios directo ni importa desde otro archivo de servicios.
 // ============================================================
 import axios, { type AxiosInstance } from 'axios';
 import type {
@@ -12,7 +10,6 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 const API_TIMEOUT  = Number(import.meta.env.VITE_API_TIMEOUT ?? 10000);
 
-// ── Instancia Axios ──────────────────────────────────────────
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
@@ -22,7 +19,6 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
-// Token en memoria para evitar condición de carrera con localStorage
 let _memToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
@@ -36,7 +32,6 @@ export function setAuthToken(token: string | null) {
   }
 }
 
-// Restaurar token al cargar el módulo
 const _savedToken = localStorage.getItem('auth_token');
 if (_savedToken) setAuthToken(_savedToken);
 
@@ -46,27 +41,33 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Solo redirige al login si no hay token en absoluto,
+// o si el propio endpoint de auth rechaza el token.
+// Un 401 en cualquier otro endpoint con token presente
+// NO expulsa al usuario — el componente maneja el error.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Solo redirigir si realmente no hay token (no es una petición pública)
-      const token = localStorage.getItem('auth_token');
-      const isAuthRoute = error.config?.url?.includes('/auth/');
-      if (!isAuthRoute && !token) {
+      const token       = localStorage.getItem('auth_token');
+      const url         = error.config?.url || '';
+      const isAuthRoute = url.includes('/auth/login') || url.includes('/auth/me');
+
+      if (!token) {
         window.location.href = '/login';
-      } else if (!isAuthRoute && token) {
-        // Token expirado — limpiar y redirigir
+      } else if (isAuthRoute) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_usuario');
+        _memToken = null;
+        delete api.defaults.headers.common['Authorization'];
         window.location.href = '/login';
       }
+      // Token presente + endpoint no-auth: rechazar sin redirigir
     }
     return Promise.reject(error);
   }
 );
 
-// ── Catálogos ────────────────────────────────────────────────
 export const catalogosService = {
   async getItems(nombre: string) {
     const { data } = await api.get<CatalogoItem[]>(`/catalogos/${nombre}/items`);
@@ -84,7 +85,6 @@ export const catalogosService = {
   },
 };
 
-// ── Deportistas ──────────────────────────────────────────────
 export const deportistasService = {
   async getAll(page = 1, page_size = 10) {
     const { data } = await api.get<PaginatedResponse<Deportista>>('/deportistas', { params: { page, page_size } });
@@ -111,7 +111,6 @@ export const deportistasService = {
   },
 };
 
-// ── Vacunas ──────────────────────────────────────────────────
 export const vacunasService = {
   async getAll(deportistaId: string) {
     const { data } = await api.get<Vacuna[]>(`/deportistas/${deportistaId}/vacunas`);
@@ -156,7 +155,6 @@ export const vacunasService = {
   },
 };
 
-// ── Historias clínicas ───────────────────────────────────────
 export const historiasService = {
   async getAll(page = 1, page_size = 10) {
     const { data } = await api.get<PaginatedResponse<HistoriaClinica>>('/historias_clinicas/', { params: { page, page_size } });
@@ -187,10 +185,8 @@ export const historiasService = {
   },
 };
 
-// Alias usado por componentes existentes
 export const historiaClinicaService = historiasService;
 
-// ── Citas ────────────────────────────────────────────────────
 export const citasService = {
   async getAll() {
     const { data } = await api.get<Cita[]>('/citas/');
@@ -213,7 +209,6 @@ export const citasService = {
   },
 };
 
-// ── Archivos ─────────────────────────────────────────────────
 export const archivosService = {
   async getByHistoria(historiaId: string) {
     const { data } = await api.get(`/archivos/historia/${historiaId}`);
@@ -241,10 +236,8 @@ export const archivosService = {
   },
 };
 
-// Alias para compatibilidad
 export { archivosService as ArchivoCinico };
 
-// ── Documentos / PDF ─────────────────────────────────────────
 export const documentosService = {
   async generarPDF(historiaId: string) {
     const { data } = await api.get(`/documentos/historia/${historiaId}/pdf`, { responseType: 'blob' });
@@ -278,7 +271,6 @@ export const documentosService = {
   },
 };
 
-// ── Formularios / respuestas ─────────────────────────────────
 export const formulariosService = {
   async getAll() {
     const { data } = await api.get('/formularios');
@@ -316,7 +308,6 @@ export const formularioRespuestasService = {
   },
 };
 
-// ── Configuración institución ────────────────────────────────
 export const institucionService = {
   async get() {
     const { data } = await api.get<ConfiguracionInstitucion>('/configuracion');
@@ -328,14 +319,12 @@ export const institucionService = {
   },
 };
 
-// ── Re-exportar tipos para imports directos ──────────────────
 export type {
   CatalogoItem, Deportista, DeportistaCreate,
   Vacuna, VacunaCreate, HistoriaClinica, Cita,
   ConfiguracionInstitucion, PaginatedResponse,
 } from '../../types';
 
-// Alias de tipo para compatibilidad
 export type { HistoriaClinica as HistoriaClinicaType } from '../../types';
 export type Formulario = { id?: string; nombre: string; modulo: string; activo: boolean };
 export type RespuestaGrupo = { id?: string; historia_clinica_id: string; formulario_id: string };

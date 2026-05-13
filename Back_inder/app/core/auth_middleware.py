@@ -30,10 +30,10 @@ CORS_HEADERS = {
 
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
-async def auth_middleware(request: Request, call_next):
-    path = request.url.path
     auth_header = request.headers.get("Authorization")
-    print(f"DEBUG: {request.method} {path} | Auth: {auth_header[:20] if auth_header else 'NONE'}")
+    import logging
+    logging.getLogger("auth").info(f"MW: {request.method} {path} | Auth: {auth_header[:20] if auth_header else 'NONE'}")
+
     # Preflight OPTIONS — siempre permitir con CORS headers
     if request.method == "OPTIONS":
         return JSONResponse(status_code=200, headers=CORS_HEADERS)

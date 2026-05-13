@@ -7,8 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { deportistasService, vacunasService, historiaClinicaService, catalogosService } from '@/app/services/apiClient';
 import { useCatalogosContext } from '@/app/contexts/CatalogosContext';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Edit2, Trash2, Upload, Download, FileText, Syringe, User, X, Loader2, ExternalLink } from 'lucide-react';
-
+import { ArrowLeft, Plus, Edit2, Trash2, Upload, Download, FileText, Syringe, User, X, Loader2, ExternalLink, Eye } from 'lucide-react';
 const T = {
   primary:'#1F4788', primaryLight:'#EEF3FB',
   surface:'#ffffff', surfaceAlt:'#f8fafc',
@@ -21,6 +20,24 @@ const T = {
 
 const fmtFecha = (d?: string | null) =>
   d ? new Date(d + 'T12:00:00').toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric' }) : '—';
+
+
+const VACUNAS_DEPORTISTAS = [
+  'Tétanos / Toxoide tetánico',
+  'Hepatitis B',
+  'Hepatitis A',
+  'Influenza (gripa)',
+  'COVID-19',
+  'Fiebre Amarilla',
+  'Sarampión / MMR',
+  'Meningococo',
+  'Neumococo',
+  'Varicela',
+  'Poliomielitis',
+  'Difteria',
+  'VPH (Virus del Papiloma Humano)',
+  'Rabia (profiláctica)',
+];
 
 interface Props { deportistaId: string; onBack?: () => void; }
 
@@ -36,6 +53,7 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
   const [editV,      setEditV]      = useState<any>(null);
   const [form,       setForm]       = useState({ nombre_vacuna:'', fecha_administracion:'', observaciones:'', archivo: null as File|null });
   const [saving,     setSaving]     = useState(false);
+  const [preview,    setPreview]    = useState<{url:string; tipo:string; nombre:string} | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { cargar(); }, [deportistaId]);
@@ -45,7 +63,10 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
       setLoading(true);
       const [dep, hists, vacs] = await Promise.all([
         deportistasService.getById(deportistaId),
-        historiaClinicaService.getByDeportista(deportistaId).catch(() => []),
+        historiaClinicaService.getAll(1, 1000).then((res: any) => {
+        const items = Array.isArray(res) ? res : (res?.items ?? []);
+        return items.filter((h: any) => h.deportista_id === deportistaId);
+      }).catch(() => []),
         vacunasService.getAll(deportistaId).catch(() => []),
       ]);
       setDeportista(dep);
@@ -78,16 +99,40 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
     catch { toast.error('Error al eliminar'); }
   };
 
+  const verCertificado = async (v: any) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch(`/api/v1/deportistas/${deportistaId}/vacunas/${v.id}/archivo`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) { toast.error('Sin certificado adjunto'); return; }
+      const contentType = res.headers.get('content-type') || 'application/octet-stream';
+      const blob = new Blob([await res.arrayBuffer()], { type: contentType });
+      const url = URL.createObjectURL(blob);
+      setPreview({ url, tipo: contentType, nombre: v.nombre_archivo || v.nombre_vacuna });
+    } catch { toast.error('Error al cargar certificado'); }
+  };
+
   const descargar = async (v: any) => {
     try {
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
       const token = localStorage.getItem('auth_token');
-      const res = await fetch(`${API}/deportistas/${deportistaId}/vacunas/${v.id}/archivo`, { headers:{ ...(token?{Authorization:`Bearer ${token}`}:{}) } });
+      const res = await fetch(`/api/v1/deportistas/${deportistaId}/vacunas/${v.id}/archivo`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
       if (!res.ok) { toast.error('Sin certificado adjunto'); return; }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(await res.blob());
-      a.download = `certificado_${v.nombre_vacuna.replace(/\s/g,'_')}.pdf`;
-      a.click(); URL.revokeObjectURL(a.href);
+      const contentType = res.headers.get('content-type') || 'application/octet-stream';
+      const blob = new Blob([await res.arrayBuffer()], { type: contentType });
+      const url = URL.createObjectURL(blob);
+      // Abrir PDFs en nueva pestaña, descargar imágenes
+      if (contentType.includes('pdf')) {
+        window.open(url, '_blank');
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = v.nombre_archivo || `certificado_${v.nombre_vacuna.replace(/\s/g,'_')}`;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
     } catch { toast.error('Error al descargar'); }
   };
 
@@ -194,10 +239,15 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
                         <span style={{ display:'-webkit-box', WebkitLineClamp:2 as any, WebkitBoxOrient:'vertical' as any, overflow:'hidden' }}>{v.observaciones||'—'}</span>
                       </td>
                       <td style={{ padding:'12px 16px' }}>
-                        {v.tiene_archivo || v.archivo_url ? (
-                          <button onClick={() => descargar(v)} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', background:T.primaryLight, color:T.primary, border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                            <Download size={13}/> Descargar
-                          </button>
+                        {v.nombre_archivo ? (
+                          <div style={{ display:'flex', gap:4 }}>
+                            <button onClick={() => verCertificado(v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:T.primaryLight, color:T.primary, border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:12, fontWeight:600 }}>
+                              <Eye size={13}/> Ver
+                            </button>
+                            <button onClick={() => descargar(v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:T.surfaceAlt, color:T.textSecondary, border:`1px solid ${T.border}`, borderRadius:T.radiusSm, cursor:'pointer', fontSize:12 }}>
+                              <Download size={13}/>
+                            </button>
+                          </div>
                         ) : (
                           <span style={{ fontSize:12, color:T.textMuted, fontStyle:'italic' }}>Sin certificado</span>
                         )}
@@ -270,9 +320,27 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
             <div style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:14 }}>
               <div>
                 <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>Nombre de la vacuna *</label>
-                <input type="text" value={form.nombre_vacuna} onChange={e => setForm(f => ({...f, nombre_vacuna:e.target.value}))}
-                  placeholder="ej: COVID-19, Hepatitis B, Tétano..."
-                  style={{ width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, boxSizing:'border-box', outline:'none' }}/>
+                {form.nombre_vacuna === '__otra__' || (form.nombre_vacuna && !VACUNAS_DEPORTISTAS.includes(form.nombre_vacuna)) ? (
+                  <div style={{ display:'flex', gap:8 }}>
+                    <input type="text"
+                      value={form.nombre_vacuna === '__otra__' ? '' : form.nombre_vacuna}
+                      onChange={e => setForm(f => ({...f, nombre_vacuna: e.target.value}))}
+                      placeholder="Escribe el nombre de la vacuna..."
+                      autoFocus
+                      style={{ flex:1, padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, boxSizing:'border-box', outline:'none' }}/>
+                    <button onClick={() => setForm(f => ({...f, nombre_vacuna:''}))}
+                      style={{ padding:'9px 12px', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:T.radiusSm, cursor:'pointer', fontSize:12, color:T.textSecondary, whiteSpace:'nowrap' }}>
+                      ← Lista
+                    </button>
+                  </div>
+                ) : (
+                  <select value={form.nombre_vacuna} onChange={e => setForm(f => ({...f, nombre_vacuna: e.target.value}))}
+                    style={{ width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, background:T.surface, outline:'none', cursor:'pointer' }}>
+                    <option value="">Seleccionar vacuna...</option>
+                    {VACUNAS_DEPORTISTAS.map(v => <option key={v} value={v}>{v}</option>)}
+                    <option value="__otra__">Otra (escribir)</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label style={{ fontSize:12, fontWeight:600, color:T.textSecondary, display:'block', marginBottom:6 }}>Fecha de administración</label>
@@ -303,6 +371,46 @@ export function DetalleDeportista({ deportistaId, onBack }: Props) {
                 {saving && <Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }}/>}
                 {saving?'Guardando...':'Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL VISTA PREVIA CERTIFICADO */}
+      {preview && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:300, padding:16 }}
+          onClick={() => { URL.revokeObjectURL(preview.url); setPreview(null); }}>
+          <div style={{ background:T.surface, borderRadius:T.radius, width:'100%', maxWidth:700, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.3)' }}
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding:'14px 20px', borderBottom:`1px solid ${T.borderLight}`, display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <div>
+                <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.textPrimary }}>{preview.nombre}</p>
+                <p style={{ margin:'2px 0 0', fontSize:11, color:T.textMuted }}>{preview.tipo}</p>
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <a href={preview.url} download={preview.nombre}
+                  style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.primaryLight, color:T.primary, borderRadius:T.radiusSm, textDecoration:'none', fontSize:12, fontWeight:600 }}>
+                  <Download size={13}/> Descargar
+                </a>
+                <button onClick={() => { URL.revokeObjectURL(preview.url); setPreview(null); }}
+                  style={{ padding:6, background:'none', border:'none', cursor:'pointer', color:T.textMuted }}>
+                  <X size={18}/>
+                </button>
+              </div>
+            </div>
+            {/* Contenido */}
+            <div style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'#f1f5f9', minHeight:300 }}>
+              {preview.tipo.includes('image') ? (
+                <img src={preview.url} alt={preview.nombre}
+                  style={{ maxWidth:'100%', maxHeight:'70vh', borderRadius:T.radiusSm, boxShadow:'0 2px 12px rgba(0,0,0,0.15)' }}/>
+              ) : preview.tipo.includes('pdf') ? (
+                <iframe src={preview.url} style={{ width:'100%', height:'70vh', border:'none', borderRadius:T.radiusSm }}/>
+              ) : (
+                <div style={{ textAlign:'center', color:T.textMuted }}>
+                  <p style={{ fontSize:14 }}>No se puede previsualizar este tipo de archivo</p>
+                  <a href={preview.url} download={preview.nombre} style={{ color:T.primary, fontSize:13 }}>Descargar</a>
+                </div>
+              )}
             </div>
           </div>
         </div>

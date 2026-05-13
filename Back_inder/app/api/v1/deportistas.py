@@ -4,7 +4,7 @@ from sqlalchemy import or_
 from uuid import UUID
 import os
 from datetime import datetime
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_current_user
 from app.schemas.deportista import DeportistaCreate, DeportistaUpdate, DeportistaResponse
 from app.schemas.antecedentes import (
     VacunaDeportistaCreate,
@@ -62,7 +62,11 @@ def listar(db: Session = Depends(get_db)):
     return listar_deportistas(db)
 
 @router.get("/search", response_model=list[DeportistaResponse])
-def buscar(q: str = Query(...), db: Session = Depends(get_db)):
+def buscar(
+    q: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """Buscar deportistas por nombre, apellido o documento"""
     q = q.strip()
     if not q or len(q) < 2:

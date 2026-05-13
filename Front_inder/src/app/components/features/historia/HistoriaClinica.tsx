@@ -122,6 +122,7 @@ export type HistoriaClinicaData = {
 
 interface HistoriaClinicaProps {
   deportista: Deportista;
+  tipoCitaInicial?: string;
   onBack?: () => void;
   onSuccess?: (historiaId: string) => void;
   onNavigate?: (view: string) => void;
@@ -133,6 +134,7 @@ interface HistoriaClinicaProps {
 
 export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
   deportista,
+  tipoCitaInicial,
   onBack,
   onSuccess,
   onNavigate,
@@ -158,7 +160,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return { ...parsed, deportista_id: deportista.id };
+        return { ...parsed, deportista_id: deportista.id, tipoCita: parsed.tipoCita || tipoCitaInicial || ""  };
       } catch (e) {
         console.error('Error al cargar datos guardados:', e);
       }
@@ -172,7 +174,7 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
 
   function getInitialFormData(): HistoriaClinicaData {
     return {
-      tipoCita: "",
+      tipoCita: tipoCitaInicial || "",
       motivoConsulta: "",
       enfermedadActual: "",
       deportista_id: "",
@@ -589,12 +591,13 @@ export const HistoriaClinica: React.FC<HistoriaClinicaProps> = ({
 
               // Motivo consulta
               if (formData.motivoConsulta || formData.enfermedadActual) {
-                datosEnvio.motivo_consulta_enfermedad = {
+                  datosEnvio.motivo_consulta_enfermedad = {
                   motivo_consulta: formData.motivoConsulta || 'Consulta médica',
                   sintomas_principales: formData.enfermedadActual || null,
                   duracion_sintomas: null, inicio_enfermedad: null,
                   evolucion: null, factor_desencadenante: null,
                   medicamentos_previos: formData.medicacionActual || null,
+                  tipo_consulta: formData.tipoCita || null,   // ← AGREGAR ESTA LÍNEA
                 };
               }
 

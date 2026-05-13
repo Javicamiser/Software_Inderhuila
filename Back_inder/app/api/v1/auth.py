@@ -84,3 +84,36 @@ def listar_roles(db: Session = Depends(get_db), _=Depends(require_admin)):
 @router.post("/roles", response_model=RolResponse)
 def crear_nuevo_rol(data: RolCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
     return crear_rol(db, data)
+
+
+# ── Editar permisos de rol existente ─────────────────────────
+from pydantic import BaseModel as _BaseModel
+
+class _PermisoItem(_BaseModel):
+    modulo: str
+    accion: str
+
+class _PermisosUpdate(_BaseModel):
+    permisos: List[_PermisoItem]
+
+@router.put("/roles/{rol_id}/permisos")
+def actualizar_permisos_rol(
+    rol_id: UUID,
+    data: _PermisosUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin)
+):
+    """Reemplaza todos los permisos de un rol con los nuevos"""
+    from app.models.usuario import Rol, Permiso
+    rol = db.query(Rol).filter(Rol.id == rol_id).first()
+    if not rol:
+        raise HTTPException(status_code=404, detail="Rol no encontrado")
+    # Eliminar permisos existentes
+    db.query(Permiso).filter(Permiso.rol_id == rol_id).delete()
+    # Crear nuevos permisos
+    for p in data.permisos:
+        nuevo = Permiso(rol_id=rol_id, modulo=p.modulo, accion=p.accion)
+        db.add(nuevo)
+    db.commit()
+    db.refresh(rol)
+    return {"ok": True, "permisos": len(data.permisos)}

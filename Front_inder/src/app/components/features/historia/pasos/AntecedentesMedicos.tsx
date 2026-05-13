@@ -2,817 +2,337 @@ import { useState } from "react";
 import { HistoriaClinicaData } from "../HistoriaClinica";
 import ComponenteAlergias from './ComponenteAlergias';
 import VacunasConArchivos from '@/app/components/features/archivos/VacunasConArchivos';
-import { ChevronRight, ChevronLeft, Plus, Trash2, User, Users, AlertCircle } from "lucide-react";
-import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre, buscarPorCodigoParcial } from "./cie11Database";
+import { Plus, Trash2, User, Users, AlertCircle, Syringe, Pill, Scissors, AlertTriangle } from "lucide-react";
+import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre, buscarPorCodigoParcial } from './cie11Service';
+
+// ── Tokens ────────────────────────────────────────────────────
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB', primaryMid:'#3b82f6',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', dangerBg:'#fee2e2',
+  success:'#10b981', successBg:'#f0fdf4',
+  teal:'#0f766e', tealBg:'#f0fdfa', tealBorder:'#99f6e4',
+  violet:'#6d28d9', violetBg:'#f5f3ff', violetBorder:'#ddd6fe',
+  amber:'#b45309', amberBg:'#fffbeb', amberBorder:'#fde68a',
+  radius:'12px', radiusSm:'8px',
+};
+
+// Colores por sección — suaves y diferenciados
+const SEC = {
+  personal:   { bg:T.primaryLight,  border:T.primary,  icon:T.primary,  title:T.primary   },
+  familiar:   { bg:T.tealBg,        border:T.teal,     icon:T.teal,     title:T.teal      },
+  lesiones:   { bg:T.amberBg,       border:T.amber,    icon:T.amber,    title:T.amber     },
+  cirugias:   { bg:T.violetBg,      border:T.violet,   icon:T.violet,   title:T.violet    },
+  alergias:   { bg:'#fff1f2',       border:'#f43f5e',  icon:'#f43f5e',  title:'#be123c'   },
+  medicacion: { bg:'#ecfeff',       border:'#0891b2',  icon:'#0891b2',  title:'#0e7490'   },
+  vacunas:    { bg:T.successBg,     border:T.success,  icon:T.success,  title:T.teal      },
+};
 
 type VacunaConArchivo = {
-  id?: string;
-  nombre_vacuna: string;
-  fecha_administracion?: string;
-  observaciones?: string;
-  archivo?: File;
-  nombre_archivo?: string;
-  ruta_archivo?: string;
-  tipo_archivo?: string;
-  es_nueva?: boolean;
+  id?: string; nombre_vacuna: string; fecha_administracion?: string;
+  observaciones?: string; archivo?: File; nombre_archivo?: string;
+  ruta_archivo?: string; tipo_archivo?: string; es_nueva?: boolean;
 };
-
-
-// ── Tokens de diseño (consistentes con el sistema) ──────────
-const T = {
-  primary:      '#1F4788',
-  primaryLight: '#EEF3FB',
-  surface:      '#ffffff',
-  surfaceAlt:   '#f8fafc',
-  border:       '#e2e8f0',
-  borderLight:  '#f1f5f9',
-  textPrimary:  '#0f172a',
-  textSecondary:'#475569',
-  textMuted:    '#94a3b8',
-  danger:       '#ef4444',
-  dangerBg:     '#fef2f2',
-  success:      '#10b981',
-  successBg:    '#f0fdf4',
-  radius:       '12px',
-  radiusSm:     '8px',
-};
-
 
 type Props = {
   data: HistoriaClinicaData;
   updateData: (data: Partial<HistoriaClinicaData>) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  onCancel?: () => void;
+  onNext: () => void; onPrevious: () => void; onCancel?: () => void;
 };
 
-const familiares = [
-  "Padre",
-  "Madre",
-  "Hermano/a",
-  "Abuelo Paterno",
-  "Abuela Paterna",
-  "Abuelo Materno",
-  "Abuela Materna",
-  "Tío/a Paterno/a",
-  "Tío/a Materno/a",
-  "Otro"
-];
+const familiares = ["Padre","Madre","Hermano/a","Abuelo Paterno","Abuela Paterna","Abuelo Materno","Abuela Materna","Tío/a Paterno/a","Tío/a Materno/a","Otro"];
 
+// ── Componentes atómicos ──────────────────────────────────────
+const Seccion = ({ titulo, icon, sec, children }: {
+  titulo: string; icon: React.ReactNode;
+  sec: typeof SEC.personal; children: React.ReactNode;
+}) => (
+  <div style={{ border:`1px solid ${sec.border}`, borderRadius:T.radius, overflow:'hidden', background:sec.bg }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 18px', borderBottom:`1px solid ${sec.border}40` }}>
+      <div style={{ width:30, height:30, borderRadius:T.radiusSm, background:`${sec.icon}20`, display:'flex', alignItems:'center', justifyContent:'center', color:sec.icon, flexShrink:0 }}>
+        {icon}
+      </div>
+      <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:sec.title }}>{titulo}</h3>
+    </div>
+    <div style={{ padding:'18px' }}>{children}</div>
+  </div>
+);
+
+const Campo = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <label style={{ display:'block', marginBottom:5, fontSize:12, fontWeight:600, color:T.textSecondary }}>{label}</label>
+    {children}
+  </div>
+);
+
+const inputStyle = { width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`, borderRadius:T.radiusSm, fontSize:13, outline:'none', boxSizing:'border-box' as const, background:T.surface };
+const textareaStyle = { ...inputStyle, resize:'vertical' as const, fontFamily:'inherit' };
+const radioStyle = { accentColor: T.primary, width:14, height:14 };
+
+const ItemAntecedente = ({ codigo, nombre, extra, color, onDelete }: {
+  codigo: string; nombre: string; extra?: string; color: string; onDelete: () => void;
+}) => (
+  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'10px 13px', background:T.surface, border:`1px solid ${T.borderLight}`, borderLeft:`3px solid ${color}`, borderRadius:T.radiusSm, marginBottom:6 }}>
+    <div style={{ flex:1 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+        <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', background:`${color}15`, color, padding:'2px 8px', borderRadius:20 }}>{codigo}</span>
+        <span style={{ fontSize:13, fontWeight:600, color:T.textPrimary }}>{nombre}</span>
+        {extra && <span style={{ fontSize:11, background:T.surfaceAlt, border:`1px solid ${T.border}`, color:T.textSecondary, padding:'1px 7px', borderRadius:20 }}>{extra}</span>}
+      </div>
+    </div>
+    <button onClick={onDelete} style={{ padding:6, background:T.dangerBg, border:'none', borderRadius:T.radiusSm, cursor:'pointer', color:T.danger, flexShrink:0, marginLeft:8 }}>
+      <Trash2 size={13}/>
+    </button>
+  </div>
+);
+
+const Sugerencias = ({ items, color, onSelect }: {
+  items: {codigo:string;nombre:string}[]; color: string; onSelect: (c:string, n:string) => void;
+}) => (
+  <div style={{ position:'absolute', zIndex:20, background:T.surface, border:`1px solid ${color}`, borderRadius:T.radiusSm, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', maxHeight:240, overflowY:'auto', marginTop:4, width:'100%' }}>
+    {items.map(s => (
+      <button key={s.codigo} type="button" onClick={() => onSelect(s.codigo, s.nombre)}
+        style={{ width:'100%', padding:'8px 12px', background:'transparent', border:'none', borderBottom:`1px solid ${T.borderLight}`, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:8 }}>
+        <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', background:`${color}15`, color, padding:'2px 7px', borderRadius:20, flexShrink:0 }}>{s.codigo}</span>
+        <span style={{ fontSize:12, color:T.textPrimary }}>{s.nombre}</span>
+      </button>
+    ))}
+  </div>
+);
+
+const BtnAgregar = ({ label, color, onClick }: { label: string; color: string; onClick: () => void }) => (
+  <button type="button" onClick={onClick}
+    style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px 16px', background:color, color:'#fff', border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+    <Plus size={14}/> {label}
+  </button>
+);
+
+const RadioSiNo = ({ name, value, onSi, onNo }: { name: string; value: boolean | null; onSi: () => void; onNo: () => void }) => (
+  <div style={{ display:'flex', gap:24, marginBottom:12 }}>
+    {[{v:true,l:'Sí',fn:onSi},{v:false,l:'No',fn:onNo}].map(({v,l,fn}) => (
+      <label key={l} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
+        <input type="radio" name={name} checked={value === v} style={radioStyle} onChange={fn}/>
+        <span style={{ color:T.textSecondary }}>{l}</span>
+      </label>
+    ))}
+  </div>
+);
+
+// ── Componente principal ──────────────────────────────────────
 export function AntecedentesMedicos({ data, updateData, onNext, onPrevious, onCancel }: Props) {
-  const [nuevoCodigoPersonal, setNuevoCodigoPersonal] = useState("");
-  const [nuevoNombrePersonal, setNuevoNombrePersonal] = useState("");
-  const [nuevaObservacionPersonal, setNuevaObservacionPersonal] = useState("");
-  const [errorCodigoPersonal, setErrorCodigoPersonal] = useState("");
-  const [sugerenciasPersonales, setSugerenciasPersonales] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [mostrarSugerenciasPersonales, setMostrarSugerenciasPersonales] = useState(false);
-  const [sugerenciasCodigoPersonal, setSugerenciasCodigoPersonal] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [mostrarSugerenciasCodigoPersonal, setMostrarSugerenciasCodigoPersonal] = useState(false);
+  // Personal
+  const [codigoP, setCodigoP] = useState(""); const [nombreP, setNombreP] = useState(""); const [obsP, setObsP] = useState("");
+  const [errP, setErrP] = useState(""); const [sugNomP, setSugNomP] = useState<{codigo:string;nombre:string}[]>([]); const [showSugNomP, setShowSugNomP] = useState(false);
+  const [sugCodP, setSugCodP] = useState<{codigo:string;nombre:string}[]>([]); const [showSugCodP, setShowSugCodP] = useState(false);
+  // Familiar
+  const [codigoF, setCodigoF] = useState(""); const [nombreF, setNombreF] = useState(""); const [familiar, setFamiliar] = useState(""); const [obsF, setObsF] = useState("");
+  const [errF, setErrF] = useState(""); const [sugNomF, setSugNomF] = useState<{codigo:string;nombre:string}[]>([]); const [showSugNomF, setShowSugNomF] = useState(false);
+  const [sugCodF, setSugCodF] = useState<{codigo:string;nombre:string}[]>([]); const [showSugCodF, setShowSugCodF] = useState(false);
 
-  const [nuevoCodigoFamiliar, setNuevoCodigoFamiliar] = useState("");
-  const [nuevoNombreFamiliar, setNuevoNombreFamiliar] = useState("");
-  const [nuevoFamiliar, setNuevoFamiliar] = useState("");
-  const [nuevaObservacionFamiliar, setNuevaObservacionFamiliar] = useState("");
-  const [errorCodigoFamiliar, setErrorCodigoFamiliar] = useState("");
-  const [sugerenciasFamiliares, setSugerenciasFamiliares] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [mostrarSugerenciasFamiliares, setMostrarSugerenciasFamiliares] = useState(false);
-  const [sugerenciasCodigoFamiliar, setSugerenciasCodigoFamiliar] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [mostrarSugerenciasCodigoFamiliar, setMostrarSugerenciasCodigoFamiliar] = useState(false);
-
-  const handleCodigoPersonalChange = (codigo: string) => {
-    const codigoUpper = codigo.toUpperCase();
-    setNuevoCodigoPersonal(codigoUpper);
-    setErrorCodigoPersonal("");
-
-    if (codigoUpper.trim()) {
-      const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
-      if (enfermedad) {
-        setNuevoNombrePersonal(enfermedad);
-        setErrorCodigoPersonal("");
-        setSugerenciasCodigoPersonal([]);
-        setMostrarSugerenciasCodigoPersonal(false);
-      } else {
-        const resultados = buscarPorCodigoParcial(codigoUpper);
-        if (resultados.length > 0) {
-          setSugerenciasCodigoPersonal(resultados);
-          setMostrarSugerenciasCodigoPersonal(true);
-          setErrorCodigoPersonal("");
-        } else {
-          setErrorCodigoPersonal("Código CIE-11 no encontrado");
-          setSugerenciasCodigoPersonal([]);
-          setMostrarSugerenciasCodigoPersonal(false);
-        }
-        setNuevoNombrePersonal("");
+  const buscarCodigo = async (v: string, setCod: any, setNom: any, setErr: any, setSugCod: any, setShowSugCod: any) => {
+    const u = v.toUpperCase(); setCod(u); setErr("");
+    if (u.trim()) {
+      const e = await buscarEnfermedadPorCodigo(u);
+      if (e) { setNom(e?.nombre ?? ""); setSugCod([]); setShowSugCod(false); }
+      else {
+        const r = await buscarPorCodigoParcial(u);
+        if (r.length > 0) { setSugCod(r.map((x:any) => ({ codigo:x.codigo, nombre:x.nombre }))); setShowSugCod(true); }
+        else { setErr("Código no encontrado"); setSugCod([]); setShowSugCod(false); }
+        setNom("");
       }
-    } else {
-      setNuevoNombrePersonal("");
-      setSugerenciasCodigoPersonal([]);
-      setMostrarSugerenciasCodigoPersonal(false);
-    }
+    } else { setNom(""); setSugCod([]); setShowSugCod(false); }
   };
 
-  const handleNombrePersonalChange = (nombre: string) => {
-    setNuevoNombrePersonal(nombre);
-    setErrorCodigoPersonal("");
-
-    if (nombre.trim() && nombre.length >= 3) {
-      const resultados = buscarCodigosPorNombre(nombre);
-      if (resultados.length > 0) {
-        setSugerenciasPersonales(resultados);
-        setMostrarSugerenciasPersonales(true);
-      } else {
-        setNuevoCodigoPersonal("");
-        setSugerenciasPersonales([]);
-        setMostrarSugerenciasPersonales(false);
-      }
-    } else {
-      setSugerenciasPersonales([]);
-      setMostrarSugerenciasPersonales(false);
-    }
+  const buscarNombre = (deb: any) => (v: string, setNom: any, setErr: any, setSugNom: any, setShowSugNom: any) => {
+    setNom(v); setErr(""); clearTimeout(deb.current);
+    if (v.trim().length >= 3) {
+      deb.current = setTimeout(async () => {
+        const r = await buscarCodigosPorNombre(v);
+        if (r.length > 0) { setSugNom(r.map((x:any) => ({ codigo:x.codigo, nombre:x.nombre }))); setShowSugNom(true); }
+        else { setSugNom([]); setShowSugNom(false); }
+      }, 400);
+    } else { setSugNom([]); setShowSugNom(false); }
   };
 
-  const handleCodigoFamiliarChange = (codigo: string) => {
-    const codigoUpper = codigo.toUpperCase();
-    setNuevoCodigoFamiliar(codigoUpper);
-    setErrorCodigoFamiliar("");
+  const debP = { current: null as any };
+  const debF = { current: null as any };
 
-    if (codigoUpper.trim()) {
-      const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
-      if (enfermedad) {
-        setNuevoNombreFamiliar(enfermedad);
-        setErrorCodigoFamiliar("");
-        setSugerenciasCodigoFamiliar([]);
-        setMostrarSugerenciasCodigoFamiliar(false);
-      } else {
-        const resultados = buscarPorCodigoParcial(codigoUpper);
-        if (resultados.length > 0) {
-          setSugerenciasCodigoFamiliar(resultados);
-          setMostrarSugerenciasCodigoFamiliar(true);
-          setErrorCodigoFamiliar("");
-        } else {
-          setErrorCodigoFamiliar("Código CIE-11 no encontrado");
-          setSugerenciasCodigoFamiliar([]);
-          setMostrarSugerenciasCodigoFamiliar(false);
-        }
-        setNuevoNombreFamiliar("");
-      }
-    } else {
-      setNuevoNombreFamiliar("");
-      setSugerenciasCodigoFamiliar([]);
-      setMostrarSugerenciasCodigoFamiliar(false);
-    }
+  const agregarPersonal = () => {
+    if (!codigoP.trim()) { alert("Ingrese un código CIE-11"); return; }
+    if (!nombreP.trim()) { alert("Verifique la enfermedad buscando el código"); return; }
+    updateData({ antecedentesPersonales: [...data.antecedentesPersonales, { codigoCIE11: codigoP.trim(), nombreEnfermedad: nombreP, observaciones: obsP }] });
+    setCodigoP(""); setNombreP(""); setObsP(""); setErrP(""); setSugNomP([]); setSugCodP([]);
   };
 
-  const handleNombreFamiliarChange = (nombre: string) => {
-    setNuevoNombreFamiliar(nombre);
-    setErrorCodigoFamiliar("");
-
-    if (nombre.trim() && nombre.length >= 3) {
-      const resultados = buscarCodigosPorNombre(nombre);
-      if (resultados.length > 0) {
-        setSugerenciasFamiliares(resultados);
-        setMostrarSugerenciasFamiliares(true);
-      } else {
-        setNuevoCodigoFamiliar("");
-        setSugerenciasFamiliares([]);
-        setMostrarSugerenciasFamiliares(false);
-      }
-    } else {
-      setSugerenciasFamiliares([]);
-      setMostrarSugerenciasFamiliares(false);
-    }
+  const agregarFamiliar = () => {
+    if (!codigoF.trim()) { alert("Ingrese un código CIE-11"); return; }
+    if (!nombreF.trim()) { alert("Verifique la enfermedad"); return; }
+    if (!familiar) { alert("Seleccione el familiar afectado"); return; }
+    updateData({ antecedentesFamiliares: [...data.antecedentesFamiliares, { codigoCIE11: codigoF.trim(), nombreEnfermedad: nombreF, familiar, observaciones: obsF }] });
+    setCodigoF(""); setNombreF(""); setFamiliar(""); setObsF(""); setErrF(""); setSugNomF([]); setSugCodF([]);
   };
 
-  const handleAgregarPersonal = () => {
-    if (!nuevoCodigoPersonal.trim()) {
-      alert("Ingrese un código CIE-11");
-      return;
-    }
-    if (!nuevoNombrePersonal.trim()) {
-      alert("Primero busque el código CIE-11 para verificar la enfermedad");
-      return;
-    }
-
-    const nuevoAntecedente = {
-      codigoCIE11: nuevoCodigoPersonal.toUpperCase().trim(),
-      nombreEnfermedad: nuevoNombrePersonal,
-      observaciones: nuevaObservacionPersonal,
-    };
-
-    updateData({
-      antecedentesPersonales: [...data.antecedentesPersonales, nuevoAntecedente],
-    });
-
-    setNuevoCodigoPersonal("");
-    setNuevoNombrePersonal("");
-    setNuevaObservacionPersonal("");
-    setErrorCodigoPersonal("");
-    setSugerenciasPersonales([]);
-    setMostrarSugerenciasPersonales(false);
-    setSugerenciasCodigoPersonal([]);
-    setMostrarSugerenciasCodigoPersonal(false);
-  };
-
-  const handleAgregarFamiliar = () => {
-    if (!nuevoCodigoFamiliar.trim()) {
-      alert("Ingrese un código CIE-11");
-      return;
-    }
-    if (!nuevoNombreFamiliar.trim()) {
-      alert("Primero busque el código CIE-11 para verificar la enfermedad");
-      return;
-    }
-    if (!nuevoFamiliar) {
-      alert("Seleccione el familiar afectado");
-      return;
-    }
-
-    const nuevoAntecedente = {
-      codigoCIE11: nuevoCodigoFamiliar.toUpperCase().trim(),
-      nombreEnfermedad: nuevoNombreFamiliar,
-      familiar: nuevoFamiliar,
-      observaciones: nuevaObservacionFamiliar,
-    };
-
-    updateData({
-      antecedentesFamiliares: [...data.antecedentesFamiliares, nuevoAntecedente],
-    });
-
-    setNuevoCodigoFamiliar("");
-    setNuevoNombreFamiliar("");
-    setNuevoFamiliar("");
-    setNuevaObservacionFamiliar("");
-    setErrorCodigoFamiliar("");
-    setSugerenciasFamiliares([]);
-    setMostrarSugerenciasFamiliares(false);
-    setSugerenciasCodigoFamiliar([]);
-    setMostrarSugerenciasCodigoFamiliar(false);
-  };
-
-  const handleEliminarPersonal = (index: number) => {
-    const updated = data.antecedentesPersonales.filter((_, i) => i !== index);
-    updateData({ antecedentesPersonales: updated });
-  };
-
-  const handleEliminarFamiliar = (index: number) => {
-    const updated = data.antecedentesFamiliares.filter((_, i) => i !== index);
-    updateData({ antecedentesFamiliares: updated });
-  };
+  const FormCIE = ({ codigo, nombre, err, sugCod, showSugCod, sugNom, showSugNom, color,
+    onCodigo, onNombre, onSelectCod, onSelectNom, onFocusCod, onFocusNom
+  }: any) => (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:12 }}>
+      <Campo label="Código CIE-11">
+        <div style={{ position:'relative' }}>
+          <input value={codigo} onChange={e => onCodigo(e.target.value)} onFocus={onFocusCod}
+            placeholder="Ej: BA00" style={{ ...inputStyle, textTransform:'uppercase', fontFamily:'monospace' }}/>
+          {err && <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, fontSize:11, color:T.danger, background:T.dangerBg, padding:'5px 8px', borderRadius:T.radiusSm }}>
+            <AlertCircle size={11}/> {err}
+          </div>}
+          {showSugCod && sugCod.length > 0 && <Sugerencias items={sugCod} color={color} onSelect={onSelectCod}/>}
+        </div>
+      </Campo>
+      <Campo label="Enfermedad">
+        <div style={{ position:'relative' }}>
+          <input value={nombre} onChange={e => onNombre(e.target.value)} onFocus={onFocusNom}
+            placeholder="Escriba el nombre (mínimo 3 caracteres)" style={inputStyle}/>
+          {showSugNom && sugNom.length > 0 && <Sugerencias items={sugNom} color={color} onSelect={onSelectNom}/>}
+        </div>
+      </Campo>
+    </div>
+  );
 
   return (
-    <div className="space-y-8">
+    <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+
       {/* ANTECEDENTES PERSONALES */}
-      <div style={{ border:`1px solid ${T.border}`, background:T.primaryLight, padding:24, borderRadius:T.radius }}>
-        <div className="flex items-center gap-3 mb-6">
-          <div style={{ background:T.primary, padding:10, borderRadius:T.radiusSm, display:"flex" }}>
-            <User className="w-5 h-5 text-white" />
-          </div>
-          <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:T.textPrimary }}>Antecedentes Personales</h3>
+      <Seccion titulo="Antecedentes Personales" icon={<User size={15}/>} sec={SEC.personal}>
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <FormCIE
+            codigo={codigoP} nombre={nombreP} err={errP} sugCod={sugCodP} showSugCod={showSugCodP} sugNom={sugNomP} showSugNom={showSugNomP} color={SEC.personal.icon}
+            onCodigo={(v:string) => buscarCodigo(v, setCodigoP, setNombreP, setErrP, setSugCodP, setShowSugCodP)}
+            onNombre={(v:string) => buscarNombre(debP)(v, setNombreP, setErrP, setSugNomP, setShowSugNomP)}
+            onSelectCod={(c:string,n:string) => { setCodigoP(c); setNombreP(n); setShowSugCodP(false); setErrP(""); }}
+            onSelectNom={(c:string,n:string) => { setCodigoP(c); setNombreP(n); setShowSugNomP(false); }}
+            onFocusCod={() => sugCodP.length > 0 && setShowSugCodP(true)}
+            onFocusNom={() => sugNomP.length > 0 && setShowSugNomP(true)}
+          />
+          <Campo label="Observaciones">
+            <textarea value={obsP} onChange={e => setObsP(e.target.value)} rows={2}
+              placeholder="Detalles adicionales, fecha de diagnóstico, tratamiento actual..." style={textareaStyle}/>
+          </Campo>
+          <BtnAgregar label="Agregar Antecedente Personal" color={SEC.personal.icon} onClick={agregarPersonal}/>
         </div>
-
-        <div style={{ background:"#fff", padding:18, borderRadius:"8px", border:"1px solid #e2e8f0", marginBottom:16 }}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Código CIE-11 */}
-            <div className="relative">
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Código CIE-11
-              </label>
-              <input
-                type="text"
-                value={nuevoCodigoPersonal}
-                onChange={(e) => handleCodigoPersonalChange(e.target.value)}
-                onFocus={() => {
-                  if (sugerenciasCodigoPersonal.length > 0) {
-                    setMostrarSugerenciasCodigoPersonal(true);
-                  }
-                }}
-                placeholder="Ej: BA00"
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 uppercase font-mono"
-              />
-              {errorCodigoPersonal && (
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, color:"#ef4444", fontSize:12, background:"#fef2f2", padding:"8px 10px", borderRadius:"6px" }}>
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{errorCodigoPersonal}</span>
-                </div>
-              )}
-              {mostrarSugerenciasCodigoPersonal && sugerenciasCodigoPersonal.length > 0 && (
-                <div style={{ position:"absolute", zIndex:20, background:"#fff", border:"1px solid #1F4788", borderRadius:"8px", boxShadow:"0 8px 24px rgba(0,0,0,0.12)", maxHeight:256, overflowY:"auto", marginTop:4, width:"100%" }}>
-                  {sugerenciasCodigoPersonal.map((sugerencia) => (
-                    <button
-                      key={sugerencia.codigo}
-                      type="button"
-                      onClick={() => {
-                        setNuevoCodigoPersonal(sugerencia.codigo);
-                        setNuevoNombrePersonal(sugerencia.nombre);
-                        setMostrarSugerenciasCodigoPersonal(false);
-                        setErrorCodigoPersonal("");
-                      }}
-                      style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", textAlign:"left", fontSize:13 }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded">
-                          {sugerencia.codigo}
-                        </span>
-                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Enfermedad */}
-            <div className="md:col-span-2 relative">
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Enfermedad
-              </label>
-              <input
-                type="text"
-                value={nuevoNombrePersonal}
-                onChange={(e) => handleNombrePersonalChange(e.target.value)}
-                onFocus={() => {
-                  if (sugerenciasPersonales.length > 0) {
-                    setMostrarSugerenciasPersonales(true);
-                  }
-                }}
-                placeholder="Escriba el nombre (mínimo 3 caracteres)"
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              />
-              {mostrarSugerenciasPersonales && sugerenciasPersonales.length > 0 && (
-                <div style={{ position:"absolute", zIndex:20, background:"#fff", border:"1px solid #1F4788", borderRadius:"8px", boxShadow:"0 8px 24px rgba(0,0,0,0.12)", maxHeight:256, overflowY:"auto", marginTop:4, width:"100%" }}>
-                  {sugerenciasPersonales.map((sugerencia) => (
-                    <button
-                      key={sugerencia.codigo}
-                      type="button"
-                      onClick={() => {
-                        setNuevoCodigoPersonal(sugerencia.codigo);
-                        setNuevoNombrePersonal(sugerencia.nombre);
-                        setMostrarSugerenciasPersonales(false);
-                      }}
-                      style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", textAlign:"left", fontSize:13 }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded">
-                          {sugerencia.codigo}
-                        </span>
-                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <label className="block mb-2 text-sm font-semibold text-gray-700">
-              Observaciones
-            </label>
-            <textarea
-              value={nuevaObservacionPersonal}
-              onChange={(e) => setNuevaObservacionPersonal(e.target.value)}
-              rows={2}
-              placeholder="Detalles adicionales, fecha de diagnóstico, tratamiento actual..."
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
-            />
-          </div>
-
-          {/* Botón Agregar */}
-          <button
-            type="button"
-            onClick={handleAgregarPersonal}
-            style={{ width:"100%", background:"#1F4788", color:"#fff", padding:"11px 16px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
-          >
-            <Plus className="w-5 h-5" />
-            Agregar Antecedente Personal
-          </button>
-        </div>
-
-        {/* Lista de Antecedentes */}
         {data.antecedentesPersonales.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-gray-700 px-1">Antecedentes registrados:</p>
-            {data.antecedentesPersonales.map((antecedente, index) => (
-              <div
-                key={index}
-                style={{ background:"#fff", padding:14, borderRadius:"8px", border:"1px solid #e2e8f0", display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:8 }}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span style={{ fontSize:11, fontWeight:700, background:"#EEF3FB", color:"#1F4788", padding:"2px 8px", borderRadius:20, fontFamily:"monospace" }}>
-                      {antecedente.codigoCIE11}
-                    </span>
-                    <span className="font-semibold text-gray-800">
-                      {antecedente.nombreEnfermedad}
-                    </span>
-                  </div>
-                  {antecedente.observaciones && (
-                    <p className="text-sm text-gray-600 mt-2">{antecedente.observaciones}</p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleEliminarPersonal(index)}
-                  style={{ marginLeft:8, padding:6, color:"#ef4444", background:"none", border:"none", borderRadius:"6px", cursor:"pointer" }}
-                  title="Eliminar"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
+          <div style={{ marginTop:14 }}>
+            <p style={{ margin:'0 0 7px', fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.05em' }}>Registrados</p>
+            {data.antecedentesPersonales.map((a, i) => (
+              <ItemAntecedente key={i} codigo={a.codigoCIE11} nombre={a.nombreEnfermedad} color={SEC.personal.icon}
+                onDelete={() => updateData({ antecedentesPersonales: data.antecedentesPersonales.filter((_,j) => j!==i) })}/>
             ))}
           </div>
         )}
-
-        {data.antecedentesPersonales.length === 0 && (
-          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
-            No hay antecedentes personales registrados
-          </p>
-        )}
-      </div>
+      </Seccion>
 
       {/* ANTECEDENTES FAMILIARES */}
-      <div style={{ border:`1px solid ${T.border}`, background:T.surfaceAlt, padding:24, borderRadius:T.radius }}>
-        <div className="flex items-center gap-3 mb-6">
-          <div style={{ background:"#1F4788", padding:10, borderRadius:"8px", display:"flex" }}>
-            <Users className="w-5 h-5 text-white" />
+      <Seccion titulo="Antecedentes Familiares" icon={<Users size={15}/>} sec={SEC.familiar}>
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <FormCIE
+            codigo={codigoF} nombre={nombreF} err={errF} sugCod={sugCodF} showSugCod={showSugCodF} sugNom={sugNomF} showSugNom={showSugNomF} color={SEC.familiar.icon}
+            onCodigo={(v:string) => buscarCodigo(v, setCodigoF, setNombreF, setErrF, setSugCodF, setShowSugCodF)}
+            onNombre={(v:string) => buscarNombre(debF)(v, setNombreF, setErrF, setSugNomF, setShowSugNomF)}
+            onSelectCod={(c:string,n:string) => { setCodigoF(c); setNombreF(n); setShowSugCodF(false); setErrF(""); }}
+            onSelectNom={(c:string,n:string) => { setCodigoF(c); setNombreF(n); setShowSugNomF(false); }}
+            onFocusCod={() => sugCodF.length > 0 && setShowSugCodF(true)}
+            onFocusNom={() => sugNomF.length > 0 && setShowSugNomF(true)}
+          />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Campo label="Familiar afectado">
+              <select value={familiar} onChange={e => setFamiliar(e.target.value)} style={{ ...inputStyle, cursor:'pointer' }}>
+                <option value="">Seleccione...</option>
+                {familiares.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </Campo>
+            <Campo label="Observaciones">
+              <input value={obsF} onChange={e => setObsF(e.target.value)} placeholder="Detalles adicionales..." style={inputStyle}/>
+            </Campo>
           </div>
-          <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:T.textPrimary }}>Antecedentes Familiares</h3>
+          <BtnAgregar label="Agregar Antecedente Familiar" color={SEC.familiar.icon} onClick={agregarFamiliar}/>
         </div>
-
-        <div style={{ background:"#fff", padding:18, borderRadius:"8px", border:"1px solid #e2e8f0", marginBottom:16 }}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Código CIE-11 */}
-            <div className="relative">
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Código CIE-11
-              </label>
-              <input
-                type="text"
-                value={nuevoCodigoFamiliar}
-                onChange={(e) => handleCodigoFamiliarChange(e.target.value)}
-                onFocus={() => {
-                  if (sugerenciasCodigoFamiliar.length > 0) {
-                    setMostrarSugerenciasCodigoFamiliar(true);
-                  }
-                }}
-                placeholder="Ej: BA00"
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 uppercase font-mono"
-              />
-              {errorCodigoFamiliar && (
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, color:"#ef4444", fontSize:12, background:"#fef2f2", padding:"8px 10px", borderRadius:"6px" }}>
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{errorCodigoFamiliar}</span>
-                </div>
-              )}
-              {mostrarSugerenciasCodigoFamiliar && sugerenciasCodigoFamiliar.length > 0 && (
-                <div className="absolute z-20 bg-white border-2 border-yellow-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
-                  {sugerenciasCodigoFamiliar.map((sugerencia) => (
-                    <button
-                      key={sugerencia.codigo}
-                      type="button"
-                      onClick={() => {
-                        setNuevoCodigoFamiliar(sugerencia.codigo);
-                        setNuevoNombreFamiliar(sugerencia.nombre);
-                        setMostrarSugerenciasCodigoFamiliar(false);
-                        setErrorCodigoFamiliar("");
-                      }}
-                      style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", textAlign:"left", fontSize:13 }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono font-bold bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded">
-                          {sugerencia.codigo}
-                        </span>
-                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Enfermedad */}
-            <div className="md:col-span-2 relative">
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Enfermedad
-              </label>
-              <input
-                type="text"
-                value={nuevoNombreFamiliar}
-                onChange={(e) => handleNombreFamiliarChange(e.target.value)}
-                onFocus={() => {
-                  if (sugerenciasFamiliares.length > 0) {
-                    setMostrarSugerenciasFamiliares(true);
-                  }
-                }}
-                placeholder="Escriba el nombre (mínimo 3 caracteres)"
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200"
-              />
-              {mostrarSugerenciasFamiliares && sugerenciasFamiliares.length > 0 && (
-                <div className="absolute z-20 bg-white border-2 border-yellow-300 rounded-lg shadow-xl max-h-64 overflow-y-auto mt-1 w-full">
-                  {sugerenciasFamiliares.map((sugerencia) => (
-                    <button
-                      key={sugerencia.codigo}
-                      type="button"
-                      onClick={() => {
-                        setNuevoCodigoFamiliar(sugerencia.codigo);
-                        setNuevoNombreFamiliar(sugerencia.nombre);
-                        setMostrarSugerenciasFamiliares(false);
-                      }}
-                      style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", textAlign:"left", fontSize:13 }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono font-bold bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded">
-                          {sugerencia.codigo}
-                        </span>
-                        <span className="text-sm text-gray-800">{sugerencia.nombre}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Familiar afectado */}
-          <div>
-            <label className="block mb-2 text-sm font-semibold text-gray-700">
-              Familiar afectado
-            </label>
-            <select
-              value={nuevoFamiliar}
-              onChange={(e) => setNuevoFamiliar(e.target.value)}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-white"
-            >
-              <option value="">Seleccione...</option>
-              {familiares.map((fam) => (
-                <option key={fam} value={fam}>
-                  {fam}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <label className="block mb-2 text-sm font-semibold text-gray-700">
-              Observaciones
-            </label>
-            <textarea
-              value={nuevaObservacionFamiliar}
-              onChange={(e) => setNuevaObservacionFamiliar(e.target.value)}
-              rows={2}
-              placeholder="Detalles adicionales sobre el antecedente familiar..."
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
-            />
-          </div>
-
-          {/* Botón Agregar */}
-          <button
-            type="button"
-            onClick={handleAgregarFamiliar}
-            className="w-full flex items-center justify-center gap-2 bg-yellow-600 text-white py-2.5 px-4 rounded-lg hover:bg-yellow-700 transition-all font-semibold shadow-md hover:shadow-lg"
-          >
-            <Plus className="w-5 h-5" />
-            Agregar Antecedente Familiar
-          </button>
-        </div>
-
-        {/* Lista de Antecedentes */}
         {data.antecedentesFamiliares.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-gray-700 px-1">Antecedentes registrados:</p>
-            {data.antecedentesFamiliares.map((antecedente, index) => (
-              <div
-                key={index}
-                style={{ background:"#fff", padding:14, borderRadius:"8px", border:"1px solid #e2e8f0", display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:8 }}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span style={{ fontSize:11, fontWeight:700, background:"#EEF3FB", color:"#1F4788", padding:"2px 8px", borderRadius:20, fontFamily:"monospace" }}>
-                      {antecedente.codigoCIE11}
-                    </span>
-                    <span className="font-semibold text-gray-800">
-                      {antecedente.nombreEnfermedad}
-                    </span>
-                    <span className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded">
-                      {antecedente.familiar}
-                    </span>
-                  </div>
-                  {antecedente.observaciones && (
-                    <p className="text-sm text-gray-600 mt-2">{antecedente.observaciones}</p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleEliminarFamiliar(index)}
-                  style={{ marginLeft:8, padding:6, color:"#ef4444", background:"none", border:"none", borderRadius:"6px", cursor:"pointer" }}
-                  title="Eliminar"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
+          <div style={{ marginTop:14 }}>
+            <p style={{ margin:'0 0 7px', fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.05em' }}>Registrados</p>
+            {data.antecedentesFamiliares.map((a, i) => (
+              <ItemAntecedente key={i} codigo={a.codigoCIE11} nombre={a.nombreEnfermedad} extra={a.familiar} color={SEC.familiar.icon}
+                onDelete={() => updateData({ antecedentesFamiliares: data.antecedentesFamiliares.filter((_,j) => j!==i) })}/>
             ))}
           </div>
         )}
-
-        {data.antecedentesFamiliares.length === 0 && (
-          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
-            No hay antecedentes familiares registrados
-          </p>
-        )}
-      </div>
+      </Seccion>
 
       {/* LESIONES PREVIAS */}
-      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", padding:24, borderRadius:"12px" }}>
-        <label className="block mb-4 font-semibold text-gray-800">Lesiones previas</label>
-        <div className="flex gap-6 mb-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="lesiones"
-              checked={data.lesionesDeportivas === true}
-              onChange={() => updateData({ lesionesDeportivas: true })}
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">Sí</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="lesiones"
-              checked={data.lesionesDeportivas === false}
-              onChange={() =>
-                updateData({
-                  lesionesDeportivas: false,
-                  descripcionLesiones: "",
-                  fechaUltimaLesion: "",
-                })
-              }
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">No</span>
-          </label>
-        </div>
-
+      <Seccion titulo="Lesiones previas" icon={<AlertTriangle size={15}/>} sec={SEC.lesiones}>
+        <RadioSiNo name="lesiones" value={data.lesionesDeportivas}
+          onSi={() => updateData({ lesionesDeportivas: true })}
+          onNo={() => updateData({ lesionesDeportivas: false, descripcionLesiones: "", fechaUltimaLesion: "" })}/>
         {data.lesionesDeportivas && (
-          <div style={{ background:"#fff", padding:16, borderRadius:"8px", border:"1px solid #e2e8f0" }}>
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Descripción de lesiones</label>
-              <textarea
-                value={data.descripcionLesiones}
-                onChange={(e) => updateData({ descripcionLesiones: e.target.value })}
-                rows={4}
-                placeholder="Describa las lesiones sufridas (tipo, gravedad, zona afectada)..."
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Fecha de la última lesión</label>
-              <input
-                type="date"
-                value={data.fechaUltimaLesion}
-                onChange={(e) => updateData({ fechaUltimaLesion: e.target.value })}
-                max={new Date().toISOString().split("T")[0]}
-                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:12, padding:14, background:T.surface, borderRadius:T.radiusSm, border:`1px solid ${T.border}` }}>
+            <Campo label="Descripción de lesiones">
+              <textarea value={data.descripcionLesiones} rows={3}
+                onChange={e => updateData({ descripcionLesiones: e.target.value })}
+                placeholder="Describa las lesiones (tipo, gravedad, zona afectada)..." style={textareaStyle}/>
+            </Campo>
+            <Campo label="Fecha de la última lesión">
+              <input type="date" value={data.fechaUltimaLesion}
+                onChange={e => updateData({ fechaUltimaLesion: e.target.value })}
+                max={new Date().toISOString().split("T")[0]} style={inputStyle}/>
+            </Campo>
           </div>
         )}
-      </div>
+      </Seccion>
 
       {/* CIRUGÍAS PREVIAS */}
-      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", padding:24, borderRadius:"12px" }}>
-        <label className="block mb-4 font-semibold text-gray-800">Cirugías previas</label>
-        <div className="flex gap-6 mb-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="cirugias"
-              checked={data.cirugiasPrevias === true}
-              onChange={() => updateData({ cirugiasPrevias: true })}
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">Sí</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="cirugias"
-              checked={data.cirugiasPrevias === false}
-              onChange={() => updateData({ cirugiasPrevias: false, detalleCirugias: "" })}
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">No</span>
-          </label>
-        </div>
-
+      <Seccion titulo="Cirugías previas" icon={<Scissors size={15}/>} sec={SEC.cirugias}>
+        <RadioSiNo name="cirugias" value={data.cirugiasPrevias}
+          onSi={() => updateData({ cirugiasPrevias: true })}
+          onNo={() => updateData({ cirugiasPrevias: false, detalleCirugias: "" })}/>
         {data.cirugiasPrevias && (
-          <textarea
-            value={data.detalleCirugias}
-            onChange={(e) => updateData({ detalleCirugias: e.target.value })}
-            rows={3}
-            placeholder="Detalle las cirugías realizadas (tipo, fecha, resultados)..."
-            className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none bg-white"
-          />
+          <textarea value={data.detalleCirugias} rows={3}
+            onChange={e => updateData({ detalleCirugias: e.target.value })}
+            placeholder="Detalle las cirugías (tipo, fecha, resultados)..." style={textareaStyle}/>
         )}
-      </div>
+      </Seccion>
 
       {/* ALERGIAS */}
-      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", padding:24, borderRadius:"12px" }}>
-        <label className="block mb-4 font-semibold text-gray-800">Alergias</label>
-        <div className="flex gap-6 mb-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="alergias"
-              checked={data.tieneAlergias === true}
-              onChange={() => updateData({ tieneAlergias: true })}
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">Sí</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="alergias"
-              checked={data.tieneAlergias === false}
-              onChange={() => updateData({ tieneAlergias: false, alergias: [] })}
-              className="w-5 h-5" style={{ accentColor:"#1F4788" }}
-            />
-            <span className="text-gray-700 font-medium">No</span>
-          </label>
-        </div>
-
+      <Seccion titulo="Alergias" icon={<AlertCircle size={15}/>} sec={SEC.alergias}>
+        <RadioSiNo name="alergias" value={data.tieneAlergias}
+          onSi={() => updateData({ tieneAlergias: true })}
+          onNo={() => updateData({ tieneAlergias: false, alergias: [] })}/>
         <ComponenteAlergias
-          tieneAlergias={data.tieneAlergias}
-          alergias={data.alergias}
-          onChangeTieneAlergias={(value) => 
-            updateData({ tieneAlergias: value })
-          }
-          onChangeAlergias={(alergias) => 
-            updateData({ alergias })
-          }
-        />
-      </div>
+          tieneAlergias={data.tieneAlergias} alergias={data.alergias}
+          onChangeTieneAlergias={value => updateData({ tieneAlergias: value })}
+          onChangeAlergias={alergias => updateData({ alergias })}/>
+      </Seccion>
 
       {/* MEDICACIÓN ACTUAL */}
-      <div className="bg-cyan-50 border-2 border-cyan-200 p-6 rounded-xl">
-        <label className="block mb-4 font-semibold text-gray-800">Medicación actual</label>
-        <div className="flex gap-6 mb-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="medicacion"
-              checked={data.tomaMedicacion === true}
-              onChange={() => updateData({ tomaMedicacion: true })}
-              className="w-5 h-5 text-cyan-600 focus:ring-2 focus:ring-cyan-300"
-            />
-            <span className="text-gray-700 font-medium">Sí</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="medicacion"
-              checked={data.tomaMedicacion === false}
-              onChange={() => updateData({ tomaMedicacion: false, medicacionActual: "" })}
-              className="w-5 h-5 text-cyan-600 focus:ring-2 focus:ring-cyan-300"
-            />
-            <span className="text-gray-700 font-medium">No</span>
-          </label>
-        </div>
-
+      <Seccion titulo="Medicación actual" icon={<Pill size={15}/>} sec={SEC.medicacion}>
+        <RadioSiNo name="medicacion" value={data.tomaMedicacion}
+          onSi={() => updateData({ tomaMedicacion: true })}
+          onNo={() => updateData({ tomaMedicacion: false, medicacionActual: "" })}/>
         {data.tomaMedicacion && (
-          <input
-            type="text"
-            value={data.medicacionActual}
-            onChange={(e) => updateData({ medicacionActual: e.target.value })}
-            placeholder="Especifique los medicamentos que toma actualmente..."
-            className="w-full px-4 py-2.5 border-2 border-cyan-300 rounded-lg focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white"
-          />
+          <input value={data.medicacionActual} onChange={e => updateData({ medicacionActual: e.target.value })}
+            placeholder="Especifique los medicamentos que toma actualmente..." style={inputStyle}/>
         )}
-      </div>
+      </Seccion>
 
       {/* VACUNAS */}
-      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", padding:24, borderRadius:"12px" }}>
-        <label className="block mb-3 font-semibold text-gray-800">Vacunas</label>
-        <p className="text-sm text-gray-600 mb-4">
-          Aquí se muestran las vacunas registradas del deportista. Puede agregar nuevas vacunas, cargar certificados y descargar archivos.
-        </p>
+      <Seccion titulo="Vacunas" icon={<Syringe size={15}/>} sec={SEC.vacunas}>
+        <p style={{ margin:'0 0 12px', fontSize:12, color:T.textSecondary }}>Vacunas registradas del deportista con sus certificados</p>
         {data.deportista_id && typeof data.deportista_id === 'string' ? (
           <VacunasConArchivos
-            deportista_id={data.deportista_id}
-            vacunas={data.vacunas || []}
-            onChangeVacunas={(vacunas: VacunaConArchivo[]) => updateData({ vacunas })}
-            readonly={false}
-          />
+            deportista_id={data.deportista_id} vacunas={data.vacunas || []}
+            onChangeVacunas={(vacunas: VacunaConArchivo[]) => updateData({ vacunas })} readonly={false}/>
         ) : (
-          <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
-            Los datos del deportista se cargarán cuando se abra la historia clínica.
-          </p>
+          <p style={{ textAlign:'center', fontSize:12, color:T.textMuted, fontStyle:'italic' }}>Los datos del deportista se cargarán cuando se abra la historia clínica.</p>
         )}
-      </div>
+      </Seccion>
+
     </div>
   );
 }

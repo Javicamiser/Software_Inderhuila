@@ -11,6 +11,7 @@ import { ListadoDeportistas } from '@/app/components/features/deportistas/Listad
 import { ListadoHistoriaClinica } from '@/app/components/features/historia/ListadoHistoriaClinica';
 import { VistaHistoriaClinica } from '@/app/components/features/historia/VistaHistoriaClinica';
 import { GestionCitas } from '@/app/components/features/citas/GestionCitas';
+import { PerfilPage } from '@/pages/PerfilPage';
 import { ArchivosGestion } from '@/app/components/features/archivos/ArchivosGestion';
 import { Reportes } from '@/app/components/features/reportes/Reportes';
 import { GestionUsuarios } from '@/app/components/features/usuarios/GestionUsuarios';
@@ -52,6 +53,8 @@ export default function App() {
               <Route path="historia/:id" element={<VistaHistoriaWrapper />} />
               <Route path="citas"        element={<GestionCitas />} />
               <Route path="archivos"     element={<ArchivosGestion />} />
+              <Route path="configuracion" element={<PerfilPage />} />
+              <Route path="perfil"        element={<PerfilPage />} />
               <Route path="reportes"     element={<Reportes />} />
               <Route path="usuarios"     element={
                 <ProtectedRoute requiereAdmin>

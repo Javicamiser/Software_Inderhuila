@@ -4,8 +4,10 @@ from uuid import UUID
 from typing import Optional, List
 from datetime import date
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_current_user          # ← MODIFICADO: agrega get_current_user
 from app.models.historia import HistoriaClinica
+from app.models.cita import Cita
+from app.models.catalogo import CatalogoItem
 from app.crud import antecedentes, historia
 from app.crud.historia import listar_todas_historias, eliminar_historia, obtener_motivo_consulta, obtener_exploracion_fisica
 from app.schemas.antecedentes import (
@@ -34,38 +36,31 @@ class AntecedentesFamiliaresData(BaseModel):
     codigo_cie11: Optional[str] = None
     nombre_enfermedad: str
 
-# ✅ FIX: Acepta tanto formato viejo (tipo_lesion/fecha_lesion) como nuevo (descripcion/fecha_ultima_lesion)
 class LesioneDeportavasData(BaseModel):
     tipo_lesion: Optional[str] = None
     fecha_lesion: Optional[date] = None
     tratamiento: Optional[str] = None
     observaciones: Optional[str] = None
-    # Campos nuevos del frontend corregido
     descripcion: Optional[str] = None
     fecha_ultima_lesion: Optional[date] = None
 
-# Sin cambios
 class CirugiasPrivasData(BaseModel):
     tipo_cirugia: str
     fecha_cirugia: Optional[date] = None
     observaciones: Optional[str] = None
 
-# ✅ FIX: Acepta tanto formato viejo (descripcion/reaccion) como nuevo (observaciones directas)
 class AlergiasData(BaseModel):
     tipo_alergia: str
     descripcion: Optional[str] = None
     reaccion: Optional[str] = None
-    # Campo nuevo del frontend corregido
     observaciones: Optional[str] = None
 
-# ✅ FIX: Acepta tanto formato viejo (nombre_medicamento) como nuevo (nombre_medicacion)
 class MedicacionesData(BaseModel):
     nombre_medicamento: Optional[str] = None
     dosis: Optional[str] = None
     frecuencia: Optional[str] = None
     duracion: Optional[str] = None
     indicacion: Optional[str] = None
-    # Campo nuevo del frontend corregido
     nombre_medicacion: Optional[str] = None
     observaciones: Optional[str] = None
 
@@ -74,12 +69,10 @@ class VacunasAdministradasData(BaseModel):
     fecha_administracion: Optional[date] = None
     proxima_dosis: Optional[date] = None
 
-# ✅ FIX: Acepta tanto formato viejo (sistema/hallazgos) como nuevo (sistema_nombre/estado)
 class RevisionSistemasData(BaseModel):
     sistema: Optional[str] = None
     hallazgos: Optional[str] = None
     observaciones: Optional[str] = None
-    # Campos nuevos del frontend corregido
     sistema_nombre: Optional[str] = None
     estado: Optional[str] = None
 
@@ -106,7 +99,6 @@ class DiagnosticosData(BaseModel):
     tipo_diagnostico: Optional[str] = "principal"
     observaciones: Optional[str] = None
 
-# ✅ FIX: Acepta campos separados del frontend corregido
 class PlanTratamientoData(BaseModel):
     recomendaciones: Optional[str] = None
     medicamentos_prescritos: Optional[str] = None
@@ -114,12 +106,10 @@ class PlanTratamientoData(BaseModel):
     rehabilitacion: Optional[str] = None
     fecha_seguimiento: Optional[date] = None
     observaciones: Optional[str] = None
-    # Campos nuevos del frontend corregido
     indicaciones_medicas: Optional[str] = None
     recomendaciones_entrenamiento: Optional[str] = None
     plan_seguimiento: Optional[str] = None
 
-# ✅ FIX: Acepta tanto formato viejo (especialidad) como nuevo (especialista)
 class RemisionesEspecialistasData(BaseModel):
     especialidad: Optional[str] = None
     motivo: str
@@ -127,7 +117,6 @@ class RemisionesEspecialistasData(BaseModel):
     fecha_remision: Optional[date] = None
     institucion: Optional[str] = None
     observaciones: Optional[str] = None
-    # Campo nuevo del frontend corregido
     especialista: Optional[str] = None
 
 class MotivoConsultaEnfermedadData(BaseModel):
@@ -138,6 +127,7 @@ class MotivoConsultaEnfermedadData(BaseModel):
     evolucion: Optional[str] = None
     factor_desencadenante: Optional[str] = None
     medicamentos_previos: Optional[str] = None
+    tipo_consulta: Optional[str] = None
 
 class ExploracionFisicaSistemasData(BaseModel):
     sistema_cardiovascular: Optional[str] = None
@@ -174,7 +164,6 @@ class HistoriaClinicaCompletaRequest(BaseModel):
 
 
 def validar_uuid(valor: str) -> UUID:
-    """Valida y convierte string a UUID"""
     try:
         return UUID(valor)
     except (ValueError, AttributeError):
@@ -194,6 +183,7 @@ def listar_historias(db: Session = Depends(get_db)):
             "deportista_id": str(h.deportista_id),
             "fecha_apertura": h.fecha_apertura,
             "created_at": h.created_at,
+            "motivo_consulta": obtener_motivo_consulta(db, h.id),
             "deportista": {
                 "id": str(h.deportista.id),
                 "nombres": h.deportista.nombres,
@@ -211,18 +201,20 @@ def listar_historias(db: Session = Depends(get_db)):
 @router.post("/completa", status_code=201)
 def crear_historia_clinica_completa(
     data: HistoriaClinicaCompletaRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),     # ← NUEVO: lee el usuario del token JWT
 ):
     try:
-        # Crear historia clinica base
+        # Crear historia clinica base — vinculada al médico logueado
         historia_record = HistoriaClinica(
             deportista_id=data.deportista_id,
             fecha_apertura=data.fecha_apertura,
-            estado_id=data.estado_id
+            estado_id=data.estado_id,
+            medico_id=current_user.id,          # ← NUEVO: guarda quién creó la historia
         )
         db.add(historia_record)
         db.flush()
-        
+
         # =====================================================
         # ANTECEDENTES PERSONALES
         # =====================================================
@@ -235,7 +227,7 @@ def crear_historia_clinica_completa(
                     observaciones=item.observaciones
                 )
                 antecedentes.crear_antecedente_personal(db, schema_data)
-        
+
         # =====================================================
         # ANTECEDENTES FAMILIARES
         # =====================================================
@@ -249,20 +241,16 @@ def crear_historia_clinica_completa(
                     observaciones=None
                 )
                 antecedentes.crear_antecedente_familiar(db, schema_data)
-        
+
         # =====================================================
         # LESIONES DEPORTIVAS
-        # ✅ FIX: Acepta ambos formatos
         # =====================================================
         if data.lesiones_deportivas:
             for item in data.lesiones_deportivas:
-                # Formato nuevo: descripcion, fecha_ultima_lesion
-                # Formato viejo: tipo_lesion, fecha_lesion, tratamiento
                 descripcion = item.descripcion or item.tipo_lesion or ""
                 if not item.descripcion and item.tratamiento:
                     descripcion += f" - Tratamiento: {item.tratamiento}"
                 fecha = item.fecha_ultima_lesion or item.fecha_lesion
-                
                 schema_data = LesioneDeportavasCreate(
                     historia_clinica_id=historia_record.id,
                     descripcion=descripcion,
@@ -270,7 +258,7 @@ def crear_historia_clinica_completa(
                     observaciones=item.observaciones
                 )
                 antecedentes.crear_lesion_deportiva(db, schema_data)
-        
+
         # =====================================================
         # CIRUGIAS PREVIAS
         # =====================================================
@@ -283,15 +271,12 @@ def crear_historia_clinica_completa(
                     observaciones=item.observaciones
                 )
                 antecedentes.crear_cirugia(db, schema_data)
-        
+
         # =====================================================
         # ALERGIAS
-        # ✅ FIX: Acepta ambos formatos
         # =====================================================
         if data.alergias:
             for item in data.alergias:
-                # Formato nuevo: tipo_alergia + observaciones directas
-                # Formato viejo: tipo_alergia + descripcion + reaccion
                 if item.observaciones:
                     obs = item.observaciones
                 else:
@@ -300,24 +285,19 @@ def crear_historia_clinica_completa(
                         obs += item.descripcion
                     if item.reaccion:
                         obs += f" - Reaccion: {item.reaccion}"
-                
                 schema_data = AlergiasCreate(
                     historia_clinica_id=historia_record.id,
                     tipo_alergia=item.tipo_alergia,
                     observaciones=obs if obs else None
                 )
                 antecedentes.crear_alergia(db, schema_data)
-        
+
         # =====================================================
         # MEDICACIONES
-        # ✅ FIX: Acepta ambos formatos
         # =====================================================
         if data.medicaciones:
             for item in data.medicaciones:
-                # Formato nuevo: nombre_medicacion, observaciones
-                # Formato viejo: nombre_medicamento, duracion, indicacion
                 nombre = item.nombre_medicacion or item.nombre_medicamento or ""
-                
                 if item.observaciones:
                     obs = item.observaciones
                 else:
@@ -326,7 +306,6 @@ def crear_historia_clinica_completa(
                         obs += f"Duracion: {item.duracion}"
                     if item.indicacion:
                         obs += f" - Indicacion: {item.indicacion}"
-                
                 schema_data = MedicacionesCreate(
                     historia_clinica_id=historia_record.id,
                     nombre_medicacion=nombre,
@@ -335,7 +314,7 @@ def crear_historia_clinica_completa(
                     observaciones=obs if obs else None
                 )
                 antecedentes.crear_medicacion(db, schema_data)
-        
+
         # =====================================================
         # VACUNAS ADMINISTRADAS
         # =====================================================
@@ -351,18 +330,14 @@ def crear_historia_clinica_completa(
                     observaciones=observaciones
                 )
                 antecedentes.crear_vacuna(db, schema_data)
-        
+
         # =====================================================
         # REVISION SISTEMAS
-        # ✅ FIX: Acepta ambos formatos (sistema/hallazgos Y sistema_nombre/estado)
         # =====================================================
         if data.revision_sistemas:
             for item in data.revision_sistemas:
-                # Formato nuevo: sistema_nombre, estado
-                # Formato viejo: sistema, hallazgos
                 nombre_sistema = item.sistema_nombre or item.sistema or ""
                 estado_sistema = item.estado or item.hallazgos or "normal"
-                
                 schema_data = RevisionSistemasCreate(
                     historia_clinica_id=historia_record.id,
                     sistema_nombre=nombre_sistema,
@@ -371,7 +346,7 @@ def crear_historia_clinica_completa(
                     tipo_revision="revision"
                 )
                 antecedentes.crear_revision_sistema(db, schema_data)
-        
+
         # =====================================================
         # SIGNOS VITALES
         # =====================================================
@@ -384,9 +359,8 @@ def crear_historia_clinica_completa(
                     if len(partes) == 2:
                         pa_sistolica = int(partes[0])
                         pa_diastolica = int(partes[1])
-                except:
+                except Exception:
                     pass
-            
             schema_data = SignosVitalesCreate(
                 historia_clinica_id=historia_record.id,
                 estatura_cm=data.signos_vitales.altura,
@@ -400,7 +374,7 @@ def crear_historia_clinica_completa(
                 imc=data.signos_vitales.imc
             )
             antecedentes.crear_signos_vitales(db, schema_data)
-        
+
         # =====================================================
         # PRUEBAS COMPLEMENTARIAS
         # =====================================================
@@ -419,7 +393,7 @@ def crear_historia_clinica_completa(
                     resultado=resultado if resultado else None
                 )
                 antecedentes.crear_prueba_complementaria(db, schema_data)
-        
+
         # =====================================================
         # DIAGNOSTICOS
         # =====================================================
@@ -437,22 +411,16 @@ def crear_historia_clinica_completa(
                     impresion_diagnostica=None
                 )
                 antecedentes.crear_diagnostico(db, schema_data)
-        
+
         # =====================================================
         # PLAN TRATAMIENTO
-        # ✅ FIX: Acepta ambos formatos (campos genéricos Y campos específicos)
         # =====================================================
         if data.plan_tratamiento:
-            # Formato nuevo: indicaciones_medicas, recomendaciones_entrenamiento, plan_seguimiento
-            # Formato viejo: recomendaciones, medicamentos_prescritos, procedimientos, rehabilitacion, observaciones
-            
             if data.plan_tratamiento.indicaciones_medicas:
-                # Formato nuevo del frontend corregido
-                indicaciones = data.plan_tratamiento.indicaciones_medicas
-                recomendaciones_ent = data.plan_tratamiento.recomendaciones_entrenamiento
-                plan_seg = data.plan_tratamiento.plan_seguimiento
+                indicaciones       = data.plan_tratamiento.indicaciones_medicas
+                recomendaciones_ent= data.plan_tratamiento.recomendaciones_entrenamiento
+                plan_seg           = data.plan_tratamiento.plan_seguimiento
             else:
-                # Formato viejo
                 indicaciones = ""
                 if data.plan_tratamiento.recomendaciones:
                     indicaciones += data.plan_tratamiento.recomendaciones
@@ -461,16 +429,13 @@ def crear_historia_clinica_completa(
                 if data.plan_tratamiento.procedimientos:
                     indicaciones += f"\nProcedimientos: {data.plan_tratamiento.procedimientos}"
                 indicaciones = indicaciones.strip() if indicaciones.strip() else None
-                
                 recomendaciones_ent = data.plan_tratamiento.rehabilitacion
-                
                 plan_seg = ""
                 if data.plan_tratamiento.observaciones:
                     plan_seg = data.plan_tratamiento.observaciones
                 if data.plan_tratamiento.fecha_seguimiento:
                     plan_seg += f"\nFecha seguimiento: {data.plan_tratamiento.fecha_seguimiento}"
                 plan_seg = plan_seg.strip() if plan_seg.strip() else None
-            
             schema_data = PlanTratamientoCreate(
                 historia_clinica_id=historia_record.id,
                 indicaciones_medicas=indicaciones,
@@ -478,17 +443,13 @@ def crear_historia_clinica_completa(
                 plan_seguimiento=plan_seg
             )
             antecedentes.crear_plan_tratamiento(db, schema_data)
-        
+
         # =====================================================
         # REMISIONES ESPECIALISTAS
-        # ✅ FIX: Acepta ambos formatos (especialidad Y especialista)
         # =====================================================
         if data.remisiones_especialistas:
             for item in data.remisiones_especialistas:
-                # Formato nuevo: especialista
-                # Formato viejo: especialidad
                 nombre_especialista = item.especialista or item.especialidad or ""
-                
                 schema_data = RemisionesEspecialistasCreate(
                     historia_clinica_id=historia_record.id,
                     especialista=nombre_especialista,
@@ -497,34 +458,62 @@ def crear_historia_clinica_completa(
                     fecha_remision=item.fecha_remision
                 )
                 antecedentes.crear_remision(db, schema_data)
-        
+
         # =====================================================
         # MOTIVO CONSULTA Y EXPLORACION FISICA
         # =====================================================
         if data.motivo_consulta_enfermedad:
             try:
-                historia.crear_motivo_consulta_enfermedad(db, historia_record.id, data.motivo_consulta_enfermedad.dict())
+                motivo_data = data.motivo_consulta_enfermedad.dict()
+                tipo_consulta = motivo_data.pop('tipo_consulta', None)
+                if tipo_consulta and not motivo_data.get('factor_desencadenante'):
+                    motivo_data['factor_desencadenante'] = f"TIPO_CONSULTA:{tipo_consulta}"
+                campos_validos = {
+                    'motivo_consulta', 'sintomas_principales', 'duracion_sintomas',
+                    'inicio_enfermedad', 'evolucion', 'factor_desencadenante', 'medicamentos_previos'
+                }
+                motivo_data = {k: v for k, v in motivo_data.items() if k in campos_validos}
+                historia.crear_motivo_consulta_enfermedad(db, historia_record.id, motivo_data)
             except Exception as e:
                 print(f"Advertencia: No se pudo guardar motivo_consulta_enfermedad: {e}")
-        
+
         if data.exploracion_fisica_sistemas:
             try:
                 historia.crear_exploracion_fisica(db, historia_record.id, data.exploracion_fisica_sistemas.dict())
             except Exception as e:
                 print(f"Advertencia: No se pudo guardar exploracion_fisica_sistemas: {e}")
-        
+
+        # ── Marcar cita como Atendida ─────────────────────────
+        try:
+            estado_atendida = db.query(CatalogoItem).filter(
+                CatalogoItem.nombre == "Atendida"
+            ).first()
+            if estado_atendida:
+                cita_hoy = db.query(Cita).filter(
+                    Cita.deportista_id == data.deportista_id,
+                    Cita.fecha == data.fecha_apertura,
+                    Cita.estado_cita_id != estado_atendida.id,
+                ).order_by(Cita.hora).first()
+                if cita_hoy:
+                    cita_hoy.estado_cita_id = estado_atendida.id
+                    db.flush()
+        except Exception:
+            pass
+        # ──────────────────────────────────────────────────────
+
         db.commit()
         db.refresh(historia_record)
-        
+
         return {
             "status": "success",
             "historia_clinica_id": str(historia_record.id),
             "deportista_id": str(historia_record.deportista_id),
             "fecha_apertura": historia_record.fecha_apertura,
             "created_at": historia_record.created_at,
+            "medico_id": str(historia_record.medico_id) if historia_record.medico_id else None,
             "message": "Historia clinica creada exitosamente"
         }
-    
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al crear historia clinica: {str(e)}")
@@ -533,13 +522,11 @@ def crear_historia_clinica_completa(
 @router.get("/{historia_clinica_id}")
 def obtener_historia(historia_clinica_id: str, db: Session = Depends(get_db)):
     historia_uuid = validar_uuid(historia_clinica_id)
-    
+
     h = db.query(HistoriaClinica).filter(HistoriaClinica.id == historia_uuid).first()
-    
     if not h:
         raise HTTPException(status_code=404, detail="Historia clinica no encontrada")
-    
-    # Construir datos del deportista con campos de contacto
+
     deportista_data = None
     if h.deportista:
         deportista_data = {
@@ -554,10 +541,7 @@ def obtener_historia(historia_clinica_id: str, db: Session = Depends(get_db)):
             "direccion": getattr(h.deportista, 'direccion', None),
             "deporte": getattr(h.deportista, 'deporte', None) or getattr(h.deportista, 'disciplina', None),
         }
-    
-    # =====================================================
-    # OBTENER MOTIVO CONSULTA Y EXPLORACION FISICA
-    # =====================================================
+
     motivo_consulta_data = None
     try:
         motivos = obtener_motivo_consulta(db, historia_uuid)
@@ -575,7 +559,7 @@ def obtener_historia(historia_clinica_id: str, db: Session = Depends(get_db)):
             }
     except Exception as e:
         print(f"Advertencia: No se pudo obtener motivo_consulta: {e}")
-    
+
     exploracion_fisica_data = None
     try:
         exploraciones = obtener_exploracion_fisica(db, historia_uuid)
@@ -597,27 +581,78 @@ def obtener_historia(historia_clinica_id: str, db: Session = Depends(get_db)):
             }
     except Exception as e:
         print(f"Advertencia: No se pudo obtener exploracion_fisica: {e}")
-    
+
     return {
         "id": str(h.id),
         "deportista_id": str(h.deportista_id),
+        "medico_id": str(h.medico_id) if getattr(h, 'medico_id', None) else None,
         "fecha_apertura": h.fecha_apertura,
         "estado_id": str(h.estado_id) if h.estado_id else None,
         "created_at": h.created_at,
         "deportista": deportista_data,
-        "antecedentes_personales": [{"id": str(a.id), "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad, "observaciones": a.observaciones} for a in h.antecedentes_personales] if h.antecedentes_personales else [],
-        "antecedentes_familiares": [{"id": str(a.id), "tipo_familiar": a.tipo_familiar, "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad} for a in h.antecedentes_familiares] if h.antecedentes_familiares else [],
-        "lesiones_deportivas": [{"id": str(l.id), "descripcion": l.descripcion, "fecha_ultima_lesion": l.fecha_ultima_lesion, "observaciones": getattr(l, 'observaciones', None)} for l in h.lesiones_deportivas] if h.lesiones_deportivas else [],
-        "cirugias_previas": [{"id": str(c.id), "tipo_cirugia": c.tipo_cirugia, "fecha_cirugia": c.fecha_cirugia, "observaciones": getattr(c, 'observaciones', None)} for c in h.cirugias_previas] if h.cirugias_previas else [],
-        "alergias": [{"id": str(a.id), "tipo_alergia": a.tipo_alergia, "observaciones": a.observaciones} for a in h.alergias] if h.alergias else [],
-        "medicaciones": [{"id": str(m.id), "nombre_medicacion": m.nombre_medicacion, "dosis": m.dosis, "frecuencia": getattr(m, 'frecuencia', None), "observaciones": getattr(m, 'observaciones', None)} for m in h.medicaciones] if h.medicaciones else [],
-        "vacunas_administradas": [{"id": str(v.id), "nombre_vacuna": v.nombre_vacuna, "fecha_administracion": getattr(v, 'fecha_administracion', None), "observaciones": getattr(v, 'observaciones', None)} for v in h.vacunas_administradas] if hasattr(h, 'vacunas_administradas') and h.vacunas_administradas else [],
-        "revision_sistemas": [{"id": str(r.id), "sistema_nombre": r.sistema_nombre, "estado": r.estado, "observaciones": getattr(r, 'observaciones', None)} for r in h.revision_sistemas] if hasattr(h, 'revision_sistemas') and h.revision_sistemas else [],
-        "signos_vitales": [{"id": str(s.id), "estatura_cm": getattr(s, 'estatura_cm', None), "peso_kg": getattr(s, 'peso_kg', None), "imc": getattr(s, 'imc', None), "frecuencia_cardiaca_lpm": getattr(s, 'frecuencia_cardiaca_lpm', None), "presion_arterial_sistolica": getattr(s, 'presion_arterial_sistolica', None), "presion_arterial_diastolica": getattr(s, 'presion_arterial_diastolica', None), "frecuencia_respiratoria_rpm": getattr(s, 'frecuencia_respiratoria_rpm', None), "temperatura_celsius": getattr(s, 'temperatura_celsius', None), "saturacion_oxigeno_percent": getattr(s, 'saturacion_oxigeno_percent', None)} for s in h.signos_vitales] if hasattr(h, 'signos_vitales') and h.signos_vitales else [],
-        "pruebas_complementarias": [{"id": str(p.id), "categoria": getattr(p, 'categoria', None), "nombre_prueba": getattr(p, 'nombre_prueba', None), "codigo_cups": getattr(p, 'codigo_cups', None), "resultado": getattr(p, 'resultado', None)} for p in h.pruebas_complementarias] if hasattr(h, 'pruebas_complementarias') and h.pruebas_complementarias else [],
-        "diagnosticos": [{"id": str(d.id), "codigo_cie11": d.codigo_cie11, "nombre_enfermedad": d.nombre_enfermedad, "observaciones": getattr(d, 'observaciones', None), "analisis_objetivo": getattr(d, 'analisis_objetivo', None), "impresion_diagnostica": getattr(d, 'impresion_diagnostica', None)} for d in h.diagnosticos] if h.diagnosticos else [],
-        "plan_tratamiento": [{"id": str(p.id), "indicaciones_medicas": getattr(p, 'indicaciones_medicas', None), "recomendaciones_entrenamiento": getattr(p, 'recomendaciones_entrenamiento', None), "plan_seguimiento": getattr(p, 'plan_seguimiento', None)} for p in h.plan_tratamiento] if hasattr(h, 'plan_tratamiento') and h.plan_tratamiento else [],
-        "remisiones_especialistas": [{"id": str(r.id), "especialista": r.especialista, "motivo": r.motivo, "prioridad": r.prioridad, "fecha_remision": getattr(r, 'fecha_remision', None)} for r in h.remisiones_especialistas] if h.remisiones_especialistas else [],
+        "antecedentes_personales": [
+            {"id": str(a.id), "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad, "observaciones": a.observaciones}
+            for a in h.antecedentes_personales
+        ] if h.antecedentes_personales else [],
+        "antecedentes_familiares": [
+            {"id": str(a.id), "tipo_familiar": a.tipo_familiar, "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad}
+            for a in h.antecedentes_familiares
+        ] if h.antecedentes_familiares else [],
+        "lesiones_deportivas": [
+            {"id": str(l.id), "descripcion": l.descripcion, "fecha_ultima_lesion": l.fecha_ultima_lesion, "observaciones": getattr(l, 'observaciones', None)}
+            for l in h.lesiones_deportivas
+        ] if h.lesiones_deportivas else [],
+        "cirugias_previas": [
+            {"id": str(c.id), "tipo_cirugia": c.tipo_cirugia, "fecha_cirugia": c.fecha_cirugia, "observaciones": getattr(c, 'observaciones', None)}
+            for c in h.cirugias_previas
+        ] if h.cirugias_previas else [],
+        "alergias": [
+            {"id": str(a.id), "tipo_alergia": a.tipo_alergia, "observaciones": a.observaciones}
+            for a in h.alergias
+        ] if h.alergias else [],
+        "medicaciones": [
+            {"id": str(m.id), "nombre_medicacion": m.nombre_medicacion, "dosis": m.dosis, "frecuencia": getattr(m, 'frecuencia', None), "observaciones": getattr(m, 'observaciones', None)}
+            for m in h.medicaciones
+        ] if h.medicaciones else [],
+        "vacunas_administradas": [
+            {"id": str(v.id), "nombre_vacuna": v.nombre_vacuna, "fecha_administracion": getattr(v, 'fecha_administracion', None), "observaciones": getattr(v, 'observaciones', None)}
+            for v in h.vacunas_administradas
+        ] if hasattr(h, 'vacunas_administradas') and h.vacunas_administradas else [],
+        "revision_sistemas": [
+            {"id": str(r.id), "sistema_nombre": r.sistema_nombre, "estado": r.estado, "observaciones": getattr(r, 'observaciones', None)}
+            for r in h.revision_sistemas
+        ] if hasattr(h, 'revision_sistemas') and h.revision_sistemas else [],
+        "signos_vitales": [
+            {
+                "id": str(s.id),
+                "estatura_cm": getattr(s, 'estatura_cm', None),
+                "peso_kg": getattr(s, 'peso_kg', None),
+                "imc": getattr(s, 'imc', None),
+                "frecuencia_cardiaca_lpm": getattr(s, 'frecuencia_cardiaca_lpm', None),
+                "presion_arterial_sistolica": getattr(s, 'presion_arterial_sistolica', None),
+                "presion_arterial_diastolica": getattr(s, 'presion_arterial_diastolica', None),
+                "frecuencia_respiratoria_rpm": getattr(s, 'frecuencia_respiratoria_rpm', None),
+                "temperatura_celsius": getattr(s, 'temperatura_celsius', None),
+                "saturacion_oxigeno_percent": getattr(s, 'saturacion_oxigeno_percent', None),
+            }
+            for s in h.signos_vitales
+        ] if hasattr(h, 'signos_vitales') and h.signos_vitales else [],
+        "pruebas_complementarias": [
+            {"id": str(p.id), "categoria": getattr(p, 'categoria', None), "nombre_prueba": getattr(p, 'nombre_prueba', None), "codigo_cups": getattr(p, 'codigo_cups', None), "resultado": getattr(p, 'resultado', None)}
+            for p in h.pruebas_complementarias
+        ] if hasattr(h, 'pruebas_complementarias') and h.pruebas_complementarias else [],
+        "diagnosticos": [
+            {"id": str(d.id), "codigo_cie11": d.codigo_cie11, "nombre_enfermedad": d.nombre_enfermedad, "observaciones": getattr(d, 'observaciones', None), "analisis_objetivo": getattr(d, 'analisis_objetivo', None), "impresion_diagnostica": getattr(d, 'impresion_diagnostica', None)}
+            for d in h.diagnosticos
+        ] if h.diagnosticos else [],
+        "plan_tratamiento": [
+            {"id": str(p.id), "indicaciones_medicas": getattr(p, 'indicaciones_medicas', None), "recomendaciones_entrenamiento": getattr(p, 'recomendaciones_entrenamiento', None), "plan_seguimiento": getattr(p, 'plan_seguimiento', None)}
+            for p in h.plan_tratamiento
+        ] if hasattr(h, 'plan_tratamiento') and h.plan_tratamiento else [],
+        "remisiones_especialistas": [
+            {"id": str(r.id), "especialista": r.especialista, "motivo": r.motivo, "prioridad": r.prioridad, "fecha_remision": getattr(r, 'fecha_remision', None)}
+            for r in h.remisiones_especialistas
+        ] if h.remisiones_especialistas else [],
         "motivo_consulta_enfermedad": motivo_consulta_data,
         "exploracion_fisica_sistemas": exploracion_fisica_data,
     }
@@ -626,7 +661,6 @@ def obtener_historia(historia_clinica_id: str, db: Session = Depends(get_db)):
 @router.delete("/{historia_clinica_id}", status_code=204)
 def eliminar_historia_clinica(historia_clinica_id: str, db: Session = Depends(get_db)):
     historia_uuid = validar_uuid(historia_clinica_id)
-    
     success = eliminar_historia(db, str(historia_uuid))
     if not success:
         raise HTTPException(status_code=404, detail="Historia clinica no encontrada")
@@ -635,12 +669,11 @@ def eliminar_historia_clinica(historia_clinica_id: str, db: Session = Depends(ge
 @router.get("/{historia_clinica_id}/completa")
 def obtener_historia_completa(historia_clinica_id: str, db: Session = Depends(get_db)):
     historia_uuid = validar_uuid(historia_clinica_id)
-    
+
     h = db.query(HistoriaClinica).filter(HistoriaClinica.id == historia_uuid).first()
     if not h:
         raise HTTPException(status_code=404, detail="Historia clinica no encontrada")
-    
-    # Obtener motivo consulta y exploracion fisica
+
     motivo_consulta_data = None
     try:
         motivos = obtener_motivo_consulta(db, historia_uuid)
@@ -658,7 +691,7 @@ def obtener_historia_completa(historia_clinica_id: str, db: Session = Depends(ge
             }
     except Exception as e:
         print(f"Advertencia: {e}")
-    
+
     exploracion_fisica_data = None
     try:
         exploraciones = obtener_exploracion_fisica(db, historia_uuid)
@@ -680,13 +713,31 @@ def obtener_historia_completa(historia_clinica_id: str, db: Session = Depends(ge
             }
     except Exception as e:
         print(f"Advertencia: {e}")
-    
+
     return {
-        "historia_clinica": {"id": str(h.id), "deportista_id": str(h.deportista_id), "fecha_apertura": h.fecha_apertura, "estado_id": str(h.estado_id) if h.estado_id else None},
-        "antecedentes_personales": [{"id": str(a.id), "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad} for a in h.antecedentes_personales],
-        "antecedentes_familiares": [{"id": str(a.id), "tipo_familiar": a.tipo_familiar, "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad} for a in h.antecedentes_familiares],
-        "diagnosticos": [{"id": str(d.id), "codigo_cie11": d.codigo_cie11, "nombre_enfermedad": d.nombre_enfermedad} for d in h.diagnosticos],
-        "remisiones_especialistas": [{"id": str(r.id), "especialista": r.especialista, "motivo": r.motivo, "prioridad": r.prioridad} for r in h.remisiones_especialistas],
+        "historia_clinica": {
+            "id": str(h.id),
+            "deportista_id": str(h.deportista_id),
+            "medico_id": str(h.medico_id) if getattr(h, 'medico_id', None) else None,
+            "fecha_apertura": h.fecha_apertura,
+            "estado_id": str(h.estado_id) if h.estado_id else None,
+        },
+        "antecedentes_personales": [
+            {"id": str(a.id), "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad}
+            for a in h.antecedentes_personales
+        ],
+        "antecedentes_familiares": [
+            {"id": str(a.id), "tipo_familiar": a.tipo_familiar, "codigo_cie11": a.codigo_cie11, "nombre_enfermedad": a.nombre_enfermedad}
+            for a in h.antecedentes_familiares
+        ],
+        "diagnosticos": [
+            {"id": str(d.id), "codigo_cie11": d.codigo_cie11, "nombre_enfermedad": d.nombre_enfermedad}
+            for d in h.diagnosticos
+        ],
+        "remisiones_especialistas": [
+            {"id": str(r.id), "especialista": r.especialista, "motivo": r.motivo, "prioridad": r.prioridad}
+            for r in h.remisiones_especialistas
+        ],
         "motivo_consulta_enfermedad": motivo_consulta_data,
         "exploracion_fisica_sistemas": exploracion_fisica_data,
     }

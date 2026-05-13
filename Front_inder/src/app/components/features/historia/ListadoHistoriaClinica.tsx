@@ -14,6 +14,7 @@ interface HistoriaDeportista {
   fecha_apertura: string;
   created_at: string;
   tipo_cita?: string;
+  motivo_consulta?: Array<{ motivo_consulta?: string; tipo_consulta?: string; factor_desencadenante?: string }> | null;
 }
 
 interface DeportistaConHistorias {
@@ -30,8 +31,10 @@ export function ListadoHistoriaClinica() {
   const [deportistas, setDeportistas] = useState<DeportistaConHistorias[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState<{id:string;nombre:string} | null>(null);
   const [vista, setVista] = useState<'listado' | 'seleccion' | 'formulario'>('listado');
   const [deportistaSeleccionado, setDeportistaSeleccionado] = useState<Deportista | null>(null);
+  const [citaSeleccionada, setCitaSeleccionada] = useState<{tipo_cita?: {nombre:string};id?:string} | undefined>(undefined);
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -51,7 +54,7 @@ export function ListadoHistoriaClinica() {
           ...d,
           historias: hists
             .filter(h => h.deportista_id === d.id)
-            .sort((a, b) => new Date(b.fecha_apertura).getTime() - new Date(a.fecha_apertura).getTime()),
+            .sort((a, b) => new Date(b.fecha_apertura + 'T00:00:00').getTime() - new Date(a.fecha_apertura + 'T00:00:00').getTime()),
           expandido: false,
         }))
         .filter(d => d.historias.length > 0);
@@ -67,13 +70,21 @@ export function ListadoHistoriaClinica() {
   const toggleExpandido = (id: string) =>
     setDeportistas(prev => prev.map(d => d.id === id ? { ...d, expandido: !d.expandido } : d));
 
-  const handleEliminar = async (historiaId: string, nombre: string) => {
-    if (!window.confirm(`¿Eliminar historia clínica de ${nombre}? Esta acción no se puede deshacer.`)) return;
+  const handleEliminar = async (historiaId: string) => {
     try {
       setIsLoading(true);
       await historiaClinicaService.delete(historiaId);
+      setConfirmandoEliminar(null);
       toast.success('Historia eliminada');
-      cargarDatos();
+      // Recargar sin colapsar - actualizar solo las historias del deportista afectado
+      const histRes = await historiaClinicaService.getAll(1, 10000);
+      const hists: any[] = Array.isArray(histRes) ? histRes : (histRes as any)?.items ?? [];
+      setDeportistas(prev => prev.map(d => ({
+        ...d,
+        historias: hists
+          .filter((h: any) => h.deportista_id === d.id)
+          .sort((a: any, b: any) => new Date(b.fecha_apertura + 'T00:00:00').getTime() - new Date(a.fecha_apertura + 'T00:00:00').getTime()),
+      })).filter(d => d.historias.length > 0));
     } catch {
       toast.error('Error al eliminar');
     } finally {
@@ -104,8 +115,9 @@ export function ListadoHistoriaClinica() {
           <span style={{fontSize:16}}>←</span> Volver
         </button>
         <SelectDeportista
-          onSelect={(dep) => {
+          onSelect={(dep, cita) => {
             setDeportistaSeleccionado(dep);
+            setCitaSeleccionada(cita);
             setVista('formulario');
           }}
         />
@@ -124,6 +136,7 @@ export function ListadoHistoriaClinica() {
         </button>
         <HistoriaClinica
           deportista={deportistaSeleccionado}
+          tipoCitaInicial={citaSeleccionada?.tipo_cita?.nombre}
           onBack={() => setVista('listado')}
           onSuccess={() => { setVista('listado'); cargarDatos(); }}
         />
@@ -234,14 +247,19 @@ export function ListadoHistoriaClinica() {
                       <tr key={hist.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 20px' }}>
                           <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#EEF3FB', color: '#1F4788' }}>
-                            {hist.tipo_cita ?? 'Control'}
+                            {(() => {
+              const m = Array.isArray(hist.motivo_consulta) ? hist.motivo_consulta[0] : hist.motivo_consulta;
+              const fd = m?.factor_desencadenante ?? '';
+              const tc = fd.startsWith('TIPO_CONSULTA:') ? fd.replace('TIPO_CONSULTA:', '') : (m?.tipo_consulta ?? '');
+              return tc || hist.tipo_cita || 'Consulta';
+            })()}
                           </span>
                         </td>
                         <td style={{ padding: '12px 20px', fontSize: 13, color: '#475569' }}>
-                          {hist.fecha_apertura ? format(new Date(hist.fecha_apertura), 'd MMM yyyy', { locale: es }) : '-'}
+                          {hist.fecha_apertura ? format(new Date(hist.fecha_apertura + 'T00:00:00'), 'd MMM yyyy', { locale: es }) : '-'}
                         </td>
                         <td style={{ padding: '12px 20px', fontSize: 13, color: '#475569' }}>
-                          {hist.created_at ? format(new Date(hist.created_at), 'd MMM yyyy HH:mm', { locale: es }) : '-'}
+                          {hist.created_at ? format(new Date(hist.created_at.endsWith('Z') ? hist.created_at : hist.created_at + 'Z'), 'd MMM yyyy HH:mm', { locale: es }) : '-'}
                         </td>
                         <td style={{ padding: '12px 20px', textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
@@ -252,12 +270,10 @@ export function ListadoHistoriaClinica() {
                             >
                               <Eye size={15} />
                             </button>
-                            <button
-                              onClick={() => handleEliminar(hist.id, `${depo.nombres} ${depo.apellidos}`)}
-                              title="Eliminar historia"
-                              style={{ padding: 7, borderRadius: 8, border: 'none', background: '#fef2f2', color: '#ef4444', cursor: 'pointer' }}
-                            >
-                              <Trash2 size={15} />
+                            <button onClick={() => setConfirmandoEliminar({id:hist.id, nombre:`${depo.nombres} ${depo.apellidos}`})}
+                                title="Eliminar historia"
+                                style={{ padding: 7, borderRadius: 8, border: 'none', background: '#fef2f2', color: '#ef4444', cursor: 'pointer' }}>
+                                <Trash2 size={15} />
                             </button>
                           </div>
                         </td>
@@ -275,6 +291,29 @@ export function ListadoHistoriaClinica() {
         <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
           Mostrando {filtrados.length} deportista(s) con historias clínicas
         </p>
+      )}
+      {/* MODAL CONFIRMAR ELIMINAR */}
+      {confirmandoEliminar && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }}
+          onClick={() => setConfirmandoEliminar(null)}>
+          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:400, width:'100%', margin:16, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin:'0 0 8px', fontSize:16, fontWeight:700, color:'#0f172a' }}>¿Eliminar historia clínica?</h3>
+            <p style={{ margin:'0 0 20px', fontSize:13, color:'#475569' }}>
+              Historia de <strong>{confirmandoEliminar.nombre}</strong>. Esta acción no se puede deshacer.
+            </p>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setConfirmandoEliminar(null)}
+                style={{ flex:1, padding:'10px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, color:'#475569' }}>
+                Cancelar
+              </button>
+              <button onClick={() => handleEliminar(confirmandoEliminar.id)}
+                style={{ flex:1, padding:'10px', background:'#ef4444', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, color:'#fff' }}>
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

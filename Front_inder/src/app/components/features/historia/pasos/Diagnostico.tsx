@@ -1,296 +1,240 @@
 import { HistoriaClinicaData } from "../HistoriaClinica";
-import {
-  ChevronLeft,
-  ChevronRight,
-  X,
-  AlertCircle,
-  BarChart2,
-  Lightbulb,
-  ClipboardList,
-  Plus,
-  Search,
-} from "lucide-react";
-import { useState } from "react";
-import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre } from "./cie11Database";
+import { X, AlertCircle, BarChart2, Lightbulb, ClipboardList, Plus } from "lucide-react";
+import { useState, useRef } from "react";
+import { buscarEnfermedadPorCodigo, buscarCodigosPorNombre } from './cie11Service';
 
-type Diagnostico = {
-  codigo: string;
-  nombre: string;
-  observaciones: string;
+const T = {
+  primary:'#1F4788', primaryLight:'#EEF3FB',
+  surface:'#ffffff', surfaceAlt:'#f8fafc',
+  border:'#e2e8f0', borderLight:'#f1f5f9',
+  textPrimary:'#0f172a', textSecondary:'#475569', textMuted:'#94a3b8',
+  danger:'#ef4444', dangerBg:'#fee2e2',
+  amber:'#b45309',  violet:'#7c3aed',
+  radius:'12px', radiusSm:'8px',
 };
 
+type Diagnostico = { codigo: string; nombre: string; observaciones: string; };
 type Props = {
-  data: HistoriaClinicaData;
-  updateData: (data: Partial<HistoriaClinicaData>) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  onCancel?: () => void;
+  data: HistoriaClinicaData; updateData: (data: Partial<HistoriaClinicaData>) => void;
+  onNext: () => void; onPrevious: () => void; onCancel?: () => void;
 };
+
+const inputStyle: React.CSSProperties = {
+  width:'100%', padding:'9px 11px', border:`1px solid ${T.border}`,
+  borderRadius:T.radiusSm, fontSize:13, outline:'none',
+  boxSizing:'border-box', background:T.surface,
+};
+const textareaStyle: React.CSSProperties = { ...inputStyle, resize:'vertical', fontFamily:'inherit' };
+
+const Campo = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+  <div>
+    <label style={{ display:'block', marginBottom:5, fontSize:12, fontWeight:600, color:T.textSecondary }}>{label}</label>
+    {children}
+    {hint && <p style={{ margin:'4px 0 0', fontSize:11, color:T.textMuted }}>{hint}</p>}
+  </div>
+);
+
+const SeccionBox = ({ icon, iconColor, label, children }: {
+  icon: React.ReactNode; iconColor: string; label: string; children: React.ReactNode;
+}) => (
+  <div style={{ border:`1px solid ${T.border}`, borderRadius:T.radius, overflow:'hidden' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', background:T.surfaceAlt, borderBottom:`1px solid ${T.borderLight}` }}>
+      <span style={{ color:iconColor }}>{icon}</span>
+      <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.textPrimary }}>{label}</h3>
+    </div>
+    <div style={{ padding:'16px' }}>{children}</div>
+  </div>
+);
 
 export function Diagnostico({ data, updateData, onNext, onPrevious, onCancel }: Props) {
   const [diagnosticos, setDiagnosticos] = useState<Diagnostico[]>(data.diagnosticos || []);
-  const [nuevoDiagnostico, setNuevoDiagnostico] = useState({
-    codigo: "",
-    nombre: "",
-    observaciones: "",
-  });
-  const [sugerenciasCIE, setSugerenciasCIE] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
-  const [errorCodigo, setErrorCodigo] = useState("");
+  const [nuevo, setNuevo] = useState({ codigo:'', nombre:'', observaciones:'' });
+  const [sugerencias, setSugerencias] = useState<{codigo:string;nombre:string}[]>([]);
+  const [showSug, setShowSug] = useState(false);
+  const [errCodigo, setErrCodigo] = useState('');
+  const deb = useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  // ✅ Función eliminar correctamente definida
-  const eliminarDiagnostico = (idx: number) => {
-    const actualizado = diagnosticos.filter((_, i) => i !== idx);
-    setDiagnosticos(actualizado);
-    updateData({ diagnosticos: actualizado });
+  const eliminar = (idx: number) => {
+    const u = diagnosticos.filter((_,i) => i !== idx);
+    setDiagnosticos(u);
+    updateData({ diagnosticos: u });
   };
 
-  const handleCodigoChange = (codigo: string) => {
-    const codigoUpper = codigo.toUpperCase();
-    setNuevoDiagnostico({ ...nuevoDiagnostico, codigo: codigoUpper });
-    setErrorCodigo("");
-
-    if (codigoUpper.trim()) {
-      const enfermedad = buscarEnfermedadPorCodigo(codigoUpper);
-      if (enfermedad) {
-        setNuevoDiagnostico((prev) => ({ ...prev, nombre: enfermedad }));
-      } else {
-        setErrorCodigo("Código CIE-11 no encontrado");
-        setNuevoDiagnostico((prev) => ({ ...prev, nombre: "" }));
-      }
+  const handleCodigo = async (v: string) => {
+    const u = v.toUpperCase();
+    setNuevo(p => ({ ...p, codigo: u }));
+    setErrCodigo('');
+    if (u.trim()) {
+      const e = await buscarEnfermedadPorCodigo(u);
+      if (e) setNuevo(p => ({ ...p, nombre: e?.nombre ?? '' }));
+      else   { setErrCodigo('Código CIE-11 no encontrado'); setNuevo(p => ({ ...p, nombre: '' })); }
     } else {
-      setNuevoDiagnostico((prev) => ({ ...prev, nombre: "" }));
+      setNuevo(p => ({ ...p, nombre: '' }));
     }
   };
 
-  const handleNombreChange = (nombre: string) => {
-    setNuevoDiagnostico({ ...nuevoDiagnostico, nombre });
-    setErrorCodigo("");
-
-    if (nombre.trim() && nombre.length >= 3) {
-      const resultados = buscarCodigosPorNombre(nombre);
-      if (resultados.length > 0) {
-        setSugerenciasCIE(resultados);
-        setMostrarSugerencias(true);
-      } else {
-        setNuevoDiagnostico((prev) => ({ ...prev, codigo: "" }));
-        setSugerenciasCIE([]);
-        setMostrarSugerencias(false);
-      }
+  const handleNombre = (v: string) => {
+    setNuevo(p => ({ ...p, nombre: v }));
+    setErrCodigo('');
+    if (deb.current) clearTimeout(deb.current);
+    if (v.trim().length >= 3) {
+      deb.current = setTimeout(async () => {
+        const r = await buscarCodigosPorNombre(v);
+        if (r.length > 0) {
+          setSugerencias(r.map((x: any) => ({ codigo: x.codigo, nombre: x.nombre })));
+          setShowSug(true);
+        } else {
+          setSugerencias([]);
+          setShowSug(false);
+        }
+      }, 400);
     } else {
-      setSugerenciasCIE([]);
-      setMostrarSugerencias(false);
+      setSugerencias([]);
+      setShowSug(false);
     }
   };
 
-  const seleccionarCIE = (item: { codigo: string; nombre: string }) => {
-    setNuevoDiagnostico({ ...nuevoDiagnostico, codigo: item.codigo, nombre: item.nombre });
-    setSugerenciasCIE([]);
-    setMostrarSugerencias(false);
-    setErrorCodigo("");
+  const seleccionar = (item: {codigo:string; nombre:string}) => {
+    setNuevo(p => ({ ...p, codigo: item.codigo, nombre: item.nombre }));
+    setSugerencias([]);
+    setShowSug(false);
+    setErrCodigo('');
   };
 
-  const agregarDiagnostico = () => {
-    if (!nuevoDiagnostico.codigo.trim()) {
-      alert("Ingrese un código CIE-11");
-      return;
-    }
-    if (!nuevoDiagnostico.nombre.trim()) {
-      alert("Primero busque el código CIE-11 para verificar la enfermedad");
-      return;
-    }
-    const actualizado = [...diagnosticos, nuevoDiagnostico];
-    setDiagnosticos(actualizado);
-    updateData({ diagnosticos: actualizado });
-    setNuevoDiagnostico({ codigo: "", nombre: "", observaciones: "" });
-    setSugerenciasCIE([]);
-    setMostrarSugerencias(false);
+  const agregar = () => {
+    if (!nuevo.codigo.trim()) { alert('Ingrese un código CIE-11'); return; }
+    if (!nuevo.nombre.trim()) { alert('Verifique la enfermedad buscando el código'); return; }
+    const u = [...diagnosticos, nuevo];
+    setDiagnosticos(u);
+    updateData({ diagnosticos: u });
+    setNuevo({ codigo:'', nombre:'', observaciones:'' });
+    setSugerencias([]);
+    setShowSug(false);
   };
 
   return (
-    <div className="space-y-6">
+    <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
 
       {/* Recomendaciones */}
-      <div className="bg-gray-100 border border-gray-300 rounded-md p-4">
-        <div className="flex items-start gap-2 mb-2">
-          <AlertCircle className="w-4 h-4 text-gray-600 flex-shrink-0 mt-0.5" />
-          <h3 className="text-sm font-medium text-gray-800">
-            Recomendaciones para el diagnóstico:
-          </h3>
+      <div style={{ padding:'12px 16px', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.textMuted}`, borderRadius:T.radiusSm }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
+          <AlertCircle size={13} style={{ color:T.textMuted }}/>
+          <span style={{ fontSize:13, fontWeight:600, color:T.textSecondary }}>Recomendaciones para el diagnóstico:</span>
         </div>
-        <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside ml-6">
-          <li>Sea claro y específico en sus observaciones</li>
-          <li>Indique código diagnóstico CIE 11 para cada diagnóstico</li>
-          <li>Mencione limitaciones o contraindicaciones para la práctica deportiva</li>
-          <li>Indique nivel de urgencia si requiere atención especializada</li>
+        <ul style={{ margin:0, paddingLeft:20, display:'flex', flexDirection:'column', gap:3 }}>
+          {[
+            'Sea claro y específico en sus observaciones',
+            'Indique código diagnóstico CIE-11 para cada diagnóstico',
+            'Mencione limitaciones o contraindicaciones para la práctica deportiva',
+            'Indique nivel de urgencia si requiere atención especializada',
+          ].map(t => (
+            <li key={t} style={{ fontSize:12, color:T.textSecondary }}>{t}</li>
+          ))}
         </ul>
       </div>
 
       {/* Análisis Objetivo */}
-      <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-          <BarChart2 className="w-4 h-4 text-purple-600" />
-          Análisis Objetivo
-        </label>
-        <textarea
-          value={data.analisisObjetivoDiagnostico || ""}
-          onChange={(e) => updateData({ analisisObjetivoDiagnostico: e.target.value })}
-          placeholder="Resumen de hallazgos objetivos encontrados durante la evaluación física, signos vitales, pruebas complementarias..."
-          rows={4}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">
+      <SeccionBox icon={<BarChart2 size={15}/>} iconColor={T.violet} label="Análisis Objetivo">
+        <textarea value={data.analisisObjetivoDiagnostico || ''} rows={4}
+          onChange={e => updateData({ analisisObjetivoDiagnostico: e.target.value })}
+          placeholder="Resumen de hallazgos objetivos: signos vitales, pruebas complementarias, evaluación física..."
+          style={textareaStyle}/>
+        <p style={{ margin:'5px 0 0', fontSize:11, color:T.textMuted }}>
           Describa los hallazgos objetivos y medibles encontrados durante la evaluación
         </p>
-      </div>
+      </SeccionBox>
 
       {/* Impresión Diagnóstica */}
-      <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-          <Lightbulb className="w-4 h-4" style={{ color:"#1F4788" }} />
-          Impresión Diagnóstica
-        </label>
-        <textarea
-          value={data.impresionDiagnostica || ""}
-          onChange={(e) => updateData({ impresionDiagnostica: e.target.value })}
+      <SeccionBox icon={<Lightbulb size={15}/>} iconColor={T.amber} label="Impresión Diagnóstica">
+        <textarea value={data.impresionDiagnostica || ''} rows={4}
+          onChange={e => updateData({ impresionDiagnostica: e.target.value })}
           placeholder="Interpretación clínica basada en los hallazgos, hipótesis diagnóstica preliminar..."
-          rows={4}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">
+          style={textareaStyle}/>
+        <p style={{ margin:'5px 0 0', fontSize:11, color:T.textMuted }}>
           Escriba la impresión diagnóstica preliminar basada en la evaluación realizada
         </p>
-      </div>
+      </SeccionBox>
 
-      {/* Diagnóstico Clínico CIE-11 */}
-      <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-        <div className="flex items-center gap-2 mb-4">
-          <ClipboardList className="w-4 h-4 text-gray-700" />
-          <h3 className="text-sm font-semibold text-gray-800">
-            Diagnóstico Clínico (CIE-11) <span className="text-red-500">*</span>
-          </h3>
-        </div>
+      {/* Diagnóstico CIE-11 */}
+      <SeccionBox icon={<ClipboardList size={15}/>} iconColor={T.primary} label="Diagnóstico Clínico (CIE-11)">
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-        <div className="space-y-4">
-          {/* Código CIE-11 */}
-          <div>
-            <label className="block text-sm text-gray-700 mb-2">Código CIE-11</label>
-            <input
-              type="text"
-              value={nuevoDiagnostico.codigo}
-              onChange={(e) => handleCodigoChange(e.target.value)}
-              placeholder="Ej. I51, B80D23..."
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errorCodigo ? "border-red-500" : "border-gray-300"
-              }`}
-            />
-            {errorCodigo && (
-              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> {errorCodigo}
-              </p>
-            )}
-            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-              <Search className="w-3 h-3" /> Buscar por nombre abajo
-            </p>
-          </div>
+          {/* Código */}
+          <Campo label="Código CIE-11" hint="Buscar por nombre abajo si no conoce el código">
+            <div style={{ position:'relative' }}>
+              <input value={nuevo.codigo} onChange={e => handleCodigo(e.target.value)}
+                placeholder="Ej: I51, BA00..."
+                style={{ ...inputStyle, textTransform:'uppercase', fontFamily:'monospace', borderColor: errCodigo ? T.danger : T.border }}/>
+              {errCodigo && (
+                <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, fontSize:11, color:T.danger, background:T.dangerBg, padding:'5px 8px', borderRadius:T.radiusSm }}>
+                  <AlertCircle size={11}/> {errCodigo}
+                </div>
+              )}
+            </div>
+          </Campo>
 
-          {/* Nombre del Diagnóstico */}
-          <div>
-            <label className="block text-sm text-gray-700 mb-2">
-              Nombre de la enfermedad / diagnóstico
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={nuevoDiagnostico.nombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                onFocus={() =>
-                  nuevoDiagnostico.nombre && mostrarSugerencias && setMostrarSugerencias(true)
-                }
-                placeholder="Ej. Hipertensión, Asma, Diabetes..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {mostrarSugerencias && sugerenciasCIE.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md mt-1 z-10 max-h-48 overflow-y-auto shadow-lg">
-                  {sugerenciasCIE.map((item, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => seleccionarCIE(item)}
-                      className="w-full text-left px-4 py-2 hover:bg-blue-100 text-sm border-b border-gray-100 last:border-b-0"
-                    >
-                      <strong>{item.codigo}</strong> - {item.nombre}
+          {/* Nombre */}
+          <Campo label="Nombre de la enfermedad / diagnóstico" hint="Escriba al menos 3 caracteres para buscar">
+            <div style={{ position:'relative' }}>
+              <input value={nuevo.nombre} onChange={e => handleNombre(e.target.value)}
+                onFocus={() => sugerencias.length > 0 && setShowSug(true)}
+                placeholder="Ej: Hipertensión, Asma, Diabetes..."
+                style={inputStyle}/>
+              {showSug && sugerencias.length > 0 && (
+                <div style={{ position:'absolute', zIndex:20, background:T.surface, border:`1px solid ${T.primary}`, borderRadius:T.radiusSm, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', maxHeight:240, overflowY:'auto', marginTop:4, width:'100%' }}>
+                  {sugerencias.map(s => (
+                    <button key={s.codigo} type="button" onClick={() => seleccionar(s)}
+                      style={{ width:'100%', padding:'8px 12px', background:'transparent', border:'none', borderBottom:`1px solid ${T.borderLight}`, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', background:T.primaryLight, color:T.primary, padding:'2px 7px', borderRadius:20, flexShrink:0 }}>{s.codigo}</span>
+                      <span style={{ fontSize:12, color:T.textPrimary }}>{s.nombre}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Escriba al menos 3 caracteres para buscar diagnósticos
-            </p>
-          </div>
+          </Campo>
 
           {/* Observaciones */}
-          <div>
-            <label className="block text-sm text-gray-700 mb-2">
-              Observaciones adicionales / Especificaciones
-            </label>
-            <textarea
-              value={nuevoDiagnostico.observaciones}
-              onChange={(e) =>
-                setNuevoDiagnostico({ ...nuevoDiagnostico, observaciones: e.target.value })
-              }
-              placeholder="Detalles adicionales, comorbilidades, especificidad deportiva, pronósticos..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
+          <Campo label="Observaciones adicionales">
+            <textarea value={nuevo.observaciones} rows={3}
+              onChange={e => setNuevo(p => ({ ...p, observaciones: e.target.value }))}
+              placeholder="Comorbilidades, especificidad deportiva, pronósticos..."
+              style={textareaStyle}/>
+          </Campo>
 
-          {/* Botón Agregar */}
-          <button
-            type="button"
-            onClick={agregarDiagnostico}
-            style={{ width:"100%", background:"#1F4788", color:"#fff", padding:"11px 16px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
-          >
-            <Plus className="w-4 h-4" />
-            Agregar Diagnóstico
+          <button type="button" onClick={agregar}
+            style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'11px 16px', background:T.primary, color:'#fff', border:'none', borderRadius:T.radiusSm, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Plus size={14}/> Agregar Diagnóstico
           </button>
         </div>
-      </div>
+      </SeccionBox>
 
-      {/* Lista de Diagnósticos */}
+      {/* Lista de diagnósticos */}
       {diagnosticos.length > 0 ? (
-        <div className="space-y-3">
-          {diagnosticos.map((diag, idx) => (
-            <div
-              key={idx}
-              className="bg-white border border-gray-300 rounded-md p-4 flex justify-between items-start"
-            >
-              <div className="flex-1">
-                <p className="font-semibold text-gray-800">
-                  {diag.codigo} - {diag.nombre}
-                </p>
-                {diag.observaciones && (
-                  <p className="text-sm text-gray-600 mt-1">{diag.observaciones}</p>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {diagnosticos.map((d, i) => (
+            <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'12px 14px', background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.primary}`, borderRadius:T.radiusSm }}>
+              <div style={{ flex:1 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', background:T.primaryLight, color:T.primary, padding:'2px 8px', borderRadius:20 }}>{d.codigo}</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:T.textPrimary }}>{d.nombre}</span>
+                </div>
+                {d.observaciones && (
+                  <p style={{ margin:'5px 0 0', fontSize:12, color:T.textSecondary }}>{d.observaciones}</p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => eliminarDiagnostico(idx)}
-                className="ml-4 text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
-                title="Eliminar diagnóstico"
-              >
-                <X className="w-5 h-5" />
+              <button type="button" onClick={() => eliminar(i)}
+                style={{ padding:6, background:T.dangerBg, border:'none', borderRadius:T.radiusSm, cursor:'pointer', color:T.danger, flexShrink:0, marginLeft:10 }}>
+                <X size={13}/>
               </button>
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-center py-8 text-gray-500">
-          No se han registrado diagnósticos clínicos
+        <div style={{ textAlign:'center', padding:'28px 0', background:T.surfaceAlt, border:`1px dashed ${T.border}`, borderRadius:T.radius }}>
+          <p style={{ margin:0, fontSize:13, color:T.textMuted, fontStyle:'italic' }}>No se han registrado diagnósticos clínicos</p>
         </div>
       )}
-
     </div>
   );
 }
