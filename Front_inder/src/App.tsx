@@ -41,27 +41,66 @@ export default function App() {
           <Routes>
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/login" element={<SetupGuard><LoginPage /></SetupGuard>} />
+
             <Route path="/" element={
               <ProtectedRoute>
                 <DashboardLayout />
               </ProtectedRoute>
             }>
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard"    element={<Inicio />} />
-              <Route path="deportistas"  element={<ListadoDeportistas />} />
-              <Route path="historia"     element={<ListadoHistoriaClinica />} />
-              <Route path="historia/:id" element={<VistaHistoriaWrapper />} />
-              <Route path="citas"        element={<GestionCitas />} />
-              <Route path="archivos"     element={<ArchivosGestion />} />
-              <Route path="configuracion" element={<PerfilPage />} />
+
+              {/* Dashboard — siempre visible */}
+              <Route path="dashboard" element={<Inicio />} />
+
+              {/* Rutas protegidas por módulo */}
+              <Route path="deportistas" element={
+                <ProtectedRoute modulo="deportistas" accion="ver">
+                  <ListadoDeportistas />
+                </ProtectedRoute>
+              } />
+
+              <Route path="historia" element={
+                <ProtectedRoute modulo="historia" accion="ver">
+                  <ListadoHistoriaClinica />
+                </ProtectedRoute>
+              } />
+
+              <Route path="historia/:id" element={
+                <ProtectedRoute modulo="historia" accion="ver">
+                  <VistaHistoriaWrapper />
+                </ProtectedRoute>
+              } />
+
+              <Route path="citas" element={
+                <ProtectedRoute modulo="citas" accion="ver">
+                  <GestionCitas />
+                </ProtectedRoute>
+              } />
+
+              <Route path="archivos" element={
+                <ProtectedRoute modulo="archivos" accion="ver">
+                  <ArchivosGestion />
+                </ProtectedRoute>
+              } />
+
+              <Route path="reportes" element={
+                <ProtectedRoute modulo="reportes" accion="ver">
+                  <Reportes />
+                </ProtectedRoute>
+              } />
+
+              {/* Perfil — accesible para todos los autenticados */}
               <Route path="perfil"        element={<PerfilPage />} />
-              <Route path="reportes"     element={<Reportes />} />
-              <Route path="usuarios"     element={
+              <Route path="configuracion" element={<PerfilPage />} />
+
+              {/* Usuarios — solo admin */}
+              <Route path="usuarios" element={
                 <ProtectedRoute requiereAdmin>
                   <GestionUsuarios />
                 </ProtectedRoute>
               } />
             </Route>
+
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </CatalogosProvider>

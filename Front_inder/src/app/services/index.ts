@@ -8,7 +8,8 @@ export {
   vacunasService,
   historiasService,
   citasService,
-  institucionService,
+  institucionService, 
+  reportesService
 } from './apiClient';
 
 export { historiasService as historiaClinicaService } from './apiClient';

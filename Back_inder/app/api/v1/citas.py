@@ -14,12 +14,21 @@ from app.models.catalogo import CatalogoItem
 router = APIRouter(tags=["Citas"])
 
 
-# ── Schemas ──────────────────────────────────────────────────
+# ── Helpers de rol ────────────────────────────────────────────
+def _es_admin(usuario) -> bool:
+    """True si el usuario tiene rol admin."""
+    try:
+        return usuario.rol.nombre.lower() in ('admin', 'administrador')
+    except Exception:
+        return False
+
+
+# ── Schemas ───────────────────────────────────────────────────
 class CitaCreate(BaseModel):
     deportista_id:  UUID
-    medico_id:      Optional[UUID] = None          # ← NUEVO
+    medico_id:      Optional[UUID] = None
     fecha:          date
-    hora:           str                            # "HH:MM"
+    hora:           str                  # "HH:MM"
     tipo_cita_id:   UUID
     estado_cita_id: UUID
     observaciones:  Optional[str] = None
@@ -27,10 +36,10 @@ class CitaCreate(BaseModel):
 class CitaUpdate(BaseModel):
     medico_id:      Optional[UUID] = None
     fecha:          Optional[date] = None
-    hora:           Optional[str] = None
+    hora:           Optional[str]  = None
     tipo_cita_id:   Optional[UUID] = None
     estado_cita_id: Optional[UUID] = None
-    observaciones:  Optional[str] = None
+    observaciones:  Optional[str]  = None
 
 
 def _serializar(c: Cita) -> dict:
@@ -43,8 +52,8 @@ def _serializar(c: Cita) -> dict:
         "tipo_cita_id":   str(c.tipo_cita_id),
         "estado_cita_id": str(c.estado_cita_id),
         "observaciones":  c.observaciones,
-        "tipo_cita":      {"nombre": c.tipo_cita.nombre}  if c.tipo_cita  else None,
-        "estado_cita":    {"nombre": c.estado_cita.nombre} if c.estado_cita else None,
+        "tipo_cita":   {"nombre": c.tipo_cita.nombre}   if c.tipo_cita   else None,
+        "estado_cita": {"nombre": c.estado_cita.nombre} if c.estado_cita else None,
         "deportista": {
             "id":               str(c.deportista.id),
             "nombres":          c.deportista.nombres,
@@ -68,20 +77,31 @@ def _cargar(db: Session, cita_id):
     ).filter(Cita.id == cita_id).first()
 
 
-# ── Rutas estáticas primero ───────────────────────────────────
+# ── Rutas estáticas ───────────────────────────────────────────
 
 @router.get("/hoy")
-def citas_hoy(db: Session = Depends(get_db)):
-    """Deportistas con citas agendadas para hoy."""
-    from app.models.deportista import Deportista
+def citas_hoy(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Citas de hoy.
+    - Admin: todas las citas del día.
+    - Médico: solo las citas asignadas a él.
+    """
     hoy = date.today()
-    rows = db.query(Cita).options(
+    q = db.query(Cita).options(
         joinedload(Cita.tipo_cita),
         joinedload(Cita.estado_cita),
         joinedload(Cita.deportista),
         joinedload(Cita.medico),
-    ).filter(Cita.fecha == hoy).order_by(Cita.hora).all()
-    return [_serializar(c) for c in rows]
+    ).filter(Cita.fecha == hoy)
+
+    # Si no es admin, filtrar solo sus citas
+    if not _es_admin(current_user):
+        q = q.filter(Cita.medico_id == current_user.id)
+
+    return [_serializar(c) for c in q.order_by(Cita.hora).all()]
 
 
 @router.get("/agenda")
@@ -89,24 +109,28 @@ def agenda_medico(
     medico_id: UUID = Query(..., description="ID del médico"),
     fecha:     date = Query(..., description="Fecha a consultar (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """
-    Devuelve los slots del médico en la fecha indicada.
-    Cada slot indica si está libre u ocupado.
-    Usado en GestionCitas al seleccionar médico + fecha.
+    Slots disponibles de un médico en una fecha.
+    Médico solo puede consultar su propia agenda.
+    Admin puede consultar cualquier agenda.
     """
-    # Horas de atención: 07:00 - 17:00 cada 30 min
+    if not _es_admin(current_user) and medico_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo puedes consultar tu propia agenda"
+        )
+
     from datetime import datetime, timedelta
-    inicio   = datetime.strptime("07:00", "%H:%M")
-    fin      = datetime.strptime("17:00", "%H:%M")
-    delta    = timedelta(minutes=30)
+    inicio      = datetime.strptime("07:00", "%H:%M")
+    fin         = datetime.strptime("17:00", "%H:%M")
     todos_slots = []
     cur = inicio
     while cur < fin:
         todos_slots.append(cur.strftime("%H:%M"))
-        cur += delta
+        cur += timedelta(minutes=30)
 
-    # Citas ya agendadas para ese médico en esa fecha
     ocupadas = db.query(Cita).options(
         joinedload(Cita.deportista),
         joinedload(Cita.tipo_cita),
@@ -121,12 +145,12 @@ def agenda_medico(
     for hora in todos_slots:
         cita = ocupadas_map.get(hora)
         slots.append({
-            "hora":    hora,
-            "libre":   cita is None,
-            "cita": {
+            "hora":  hora,
+            "libre": cita is None,
+            "cita":  {
                 "id":         str(cita.id),
                 "deportista": f"{cita.deportista.nombres} {cita.deportista.apellidos}" if cita.deportista else "—",
-                "tipo":       cita.tipo_cita.nombre if cita.tipo_cita else "—",
+                "tipo":       cita.tipo_cita.nombre   if cita.tipo_cita   else "—",
                 "estado":     cita.estado_cita.nombre if cita.estado_cita else "—",
             } if cita else None,
         })
@@ -141,8 +165,11 @@ def agenda_medico(
 
 
 @router.get("/medicos")
-def listar_medicos(db: Session = Depends(get_db)):
-    """Lista de usuarios con rol médico/profesional para el selector de citas."""
+def listar_medicos(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Lista de usuarios activos para el selector de citas."""
     medicos = db.query(Usuario).options(
         joinedload(Usuario.rol)
     ).filter(
@@ -165,24 +192,42 @@ def listar_medicos(db: Session = Depends(get_db)):
 
 @router.get("/")
 def listar(
-    page:      int = 1,
-    page_size: int = 20,
+    page:      int           = 1,
+    page_size: int           = 20,
     medico_id: Optional[UUID] = None,
     fecha:     Optional[date] = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    """
+    Lista paginada de citas.
+    - Admin: ve todas (con filtros opcionales).
+    - Médico: solo ve las suyas, el filtro medico_id se ignora.
+    """
     q = db.query(Cita).options(
         joinedload(Cita.tipo_cita),
         joinedload(Cita.estado_cita),
         joinedload(Cita.deportista),
         joinedload(Cita.medico),
     )
-    if medico_id:
-        q = q.filter(Cita.medico_id == medico_id)
+
+    if _es_admin(current_user):
+        # Admin puede filtrar por cualquier médico
+        if medico_id:
+            q = q.filter(Cita.medico_id == medico_id)
+    else:
+        # Médico siempre ve solo sus citas
+        q = q.filter(Cita.medico_id == current_user.id)
+
     if fecha:
         q = q.filter(Cita.fecha == fecha)
-    total  = q.count()
-    citas  = q.order_by(Cita.fecha, Cita.hora).offset((page - 1) * page_size).limit(page_size).all()
+
+    total = q.count()
+    citas = q.order_by(Cita.fecha, Cita.hora) \
+             .offset((page - 1) * page_size) \
+             .limit(page_size) \
+             .all()
+
     return {"total": total, "page": page, "items": [_serializar(c) for c in citas]}
 
 
@@ -192,10 +237,20 @@ def crear(
     db:   Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Si no se especifica médico, asignar al usuario logueado
-    medico_id = data.medico_id or current_user.id
+    # Admin puede asignar a cualquier médico
+    # Médico solo puede crear citas asignadas a sí mismo
+    if _es_admin(current_user):
+        medico_id = data.medico_id or current_user.id
+    else:
+        # Médico no puede asignar a otro
+        if data.medico_id and data.medico_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo puedes crear citas asignadas a ti mismo"
+            )
+        medico_id = current_user.id
 
-    # Verificar conflicto de horario para ese médico
+    # Verificar conflicto de horario
     conflicto = db.query(Cita).filter(
         and_(
             Cita.medico_id == medico_id,
@@ -206,7 +261,7 @@ def crear(
     if conflicto:
         raise HTTPException(
             status_code=409,
-            detail=f"El médico ya tiene una cita agendada a las {data.hora} el {data.fecha}"
+            detail=f"El médico ya tiene una cita a las {data.hora} el {data.fecha}"
         )
 
     try:
@@ -216,7 +271,7 @@ def crear(
 
     cita = Cita(
         deportista_id  = data.deportista_id,
-        medico_id      = medico_id,                # ← asignado
+        medico_id      = medico_id,
         fecha          = data.fecha,
         hora           = hora_obj,
         tipo_cita_id   = data.tipo_cita_id,
@@ -230,45 +285,94 @@ def crear(
 
 
 @router.get("/deportista/{deportista_id}")
-def por_deportista(deportista_id: UUID, db: Session = Depends(get_db)):
-    citas = db.query(Cita).options(
+def por_deportista(
+    deportista_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    q = db.query(Cita).options(
         joinedload(Cita.tipo_cita),
         joinedload(Cita.estado_cita),
         joinedload(Cita.deportista),
         joinedload(Cita.medico),
-    ).filter(Cita.deportista_id == deportista_id).order_by(Cita.fecha, Cita.hora).all()
-    return [_serializar(c) for c in citas]
+    ).filter(Cita.deportista_id == deportista_id)
+
+    # Médico solo ve las citas del deportista que le corresponden
+    if not _es_admin(current_user):
+        q = q.filter(Cita.medico_id == current_user.id)
+
+    return [_serializar(c) for c in q.order_by(Cita.fecha, Cita.hora).all()]
 
 
 @router.get("/{cita_id}")
-def obtener(cita_id: UUID, db: Session = Depends(get_db)):
+def obtener(
+    cita_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     c = _cargar(db, cita_id)
     if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    # Médico solo puede ver sus propias citas
+    if not _es_admin(current_user) and c.medico_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta cita")
+
     return _serializar(c)
 
 
 @router.patch("/{cita_id}")
-def actualizar(cita_id: UUID, data: CitaUpdate, db: Session = Depends(get_db)):
+def actualizar(
+    cita_id: UUID,
+    data: CitaUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     c = db.query(Cita).filter(Cita.id == cita_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
-    if data.medico_id   is not None: c.medico_id      = data.medico_id
-    if data.fecha        is not None: c.fecha          = data.fecha
-    if data.hora         is not None: c.hora           = time.fromisoformat(data.hora)
-    if data.tipo_cita_id is not None: c.tipo_cita_id   = data.tipo_cita_id
+    # Solo admin o el médico dueño pueden editar
+    if not _es_admin(current_user) and c.medico_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo puedes editar tus propias citas"
+        )
+
+    # Médico no puede reasignar a otro médico
+    if not _es_admin(current_user) and data.medico_id and data.medico_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="No puedes reasignar la cita a otro médico"
+        )
+
+    if data.medico_id      is not None: c.medico_id      = data.medico_id
+    if data.fecha          is not None: c.fecha          = data.fecha
+    if data.hora           is not None: c.hora           = time.fromisoformat(data.hora)
+    if data.tipo_cita_id   is not None: c.tipo_cita_id   = data.tipo_cita_id
     if data.estado_cita_id is not None: c.estado_cita_id = data.estado_cita_id
-    if data.observaciones is not None: c.observaciones = data.observaciones
+    if data.observaciones  is not None: c.observaciones  = data.observaciones
 
     db.commit()
     return _serializar(_cargar(db, cita_id))
 
 
 @router.delete("/{cita_id}", status_code=204)
-def eliminar(cita_id: UUID, db: Session = Depends(get_db)):
+def eliminar(
+    cita_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     c = db.query(Cita).filter(Cita.id == cita_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    # Solo admin o el médico dueño pueden eliminar
+    if not _es_admin(current_user) and c.medico_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo puedes eliminar tus propias citas"
+        )
+
     db.delete(c)
     db.commit()

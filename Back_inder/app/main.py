@@ -19,6 +19,7 @@ from app.api.v1 import deportistas, historias, citas, archivos, cie11, cups, cat
 from app.api.v1 import perfil as perfil_router
 from app.api.v1.descarga_segura import router as descarga_segura_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1 import reportes
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -77,3 +78,4 @@ app.include_router(antecedentes.router,      prefix="/api/v1")
 app.include_router(documentos.router,        prefix="/api/v1")
 app.include_router(descarga_segura_router,   prefix="/api/v1")
 app.include_router(perfil_router.router,       prefix="/api/v1/perfil")
+app.include_router(reportes.router, prefix="/api/v1")

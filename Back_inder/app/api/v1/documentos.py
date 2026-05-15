@@ -9,18 +9,18 @@ from uuid import UUID
 from typing import Optional, List
 import base64 as _b64
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_current_user          # ← MODIFICADO
 from app.models.historia import HistoriaClinica
 from app.models.deportista import Deportista
 from app.models.usuario import Usuario
-from app.services.documento_service import generar_documento_historia_clinica
-from app.crud.historia import obtener_motivo_consulta, obtener_exploracion_fisica
 from app.services.documento_service import (
-       generar_documento_historia_clinica,
-       generar_epicrisis,
-       generar_receta_medica,
-       generar_interconsulta,
+    generar_documento_historia_clinica,
+    generar_epicrisis,
+    generar_receta_medica,
+    generar_interconsulta,
 )
+from app.crud.historia import obtener_motivo_consulta, obtener_exploracion_fisica
+
 try:
     from app.services.email_service import (
         enviar_email_con_pdf,
@@ -53,25 +53,23 @@ def filtrar_datos_por_secciones(datos_completos: dict, secciones: List[str]) -> 
     secciones_set = set(secciones)
     if secciones_set == SECCIONES_VALIDAS:
         return datos_completos
-
     d = dict(datos_completos)
-    if "motivo_consulta"       not in secciones_set: d["motivo_consulta_enfermedad"]  = None
-    if "antecedentes"          not in secciones_set:
+    if "motivo_consulta"         not in secciones_set: d["motivo_consulta_enfermedad"]  = None
+    if "antecedentes"            not in secciones_set:
         for k in ("antecedentes_personales","antecedentes_familiares","lesiones_deportivas",
                   "cirugias_previas","alergias","medicaciones","vacunas_administradas"):
             d[k] = []
-    if "revision_sistemas"     not in secciones_set: d["revision_sistemas"]           = []
-    if "signos_vitales"        not in secciones_set: d["signos_vitales"]              = []
-    if "exploracion_fisica"    not in secciones_set: d["exploracion_fisica_sistemas"] = None
-    if "pruebas_complementarias" not in secciones_set: d["pruebas_complementarias"]  = []
-    if "diagnosticos"          not in secciones_set: d["diagnosticos"]                = []
-    if "plan_tratamiento"      not in secciones_set: d["plan_tratamiento"]            = []
-    if "remisiones"            not in secciones_set: d["remisiones_especialistas"]    = []
+    if "revision_sistemas"       not in secciones_set: d["revision_sistemas"]           = []
+    if "signos_vitales"          not in secciones_set: d["signos_vitales"]              = []
+    if "exploracion_fisica"      not in secciones_set: d["exploracion_fisica_sistemas"] = None
+    if "pruebas_complementarias" not in secciones_set: d["pruebas_complementarias"]     = []
+    if "diagnosticos"            not in secciones_set: d["diagnosticos"]                = []
+    if "plan_tratamiento"        not in secciones_set: d["plan_tratamiento"]            = []
+    if "remisiones"              not in secciones_set: d["remisiones_especialistas"]    = []
     return d
 
 
 def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
-    """Construye el dict completo con todos los datos de la historia para PDF y JSON."""
     try:
         historia_uuid = UUID(historia_id)
     except (ValueError, TypeError):
@@ -81,7 +79,6 @@ def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
     if not h:
         return None
 
-    # Motivo consulta
     motivo_consulta_data = None
     try:
         motivos = obtener_motivo_consulta(db, historia_uuid)
@@ -102,25 +99,24 @@ def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
     except Exception as e:
         print(f"Advertencia obtener_motivo_consulta: {e}")
 
-    # Exploración física
     exploracion_fisica_data = None
     try:
         exploraciones = obtener_exploracion_fisica(db, historia_uuid)
         if exploraciones:
             e = exploraciones[0]
             exploracion_fisica_data = {
-                "id":                       str(e.id),
-                "sistema_cardiovascular":   getattr(e, 'sistema_cardiovascular', None),
-                "sistema_respiratorio":     getattr(e, 'sistema_respiratorio', None),
-                "sistema_digestivo":        getattr(e, 'sistema_digestivo', None),
-                "sistema_neurologico":      getattr(e, 'sistema_neurologico', None),
-                "sistema_genitourinario":   getattr(e, 'sistema_genitourinario', None),
+                "id":                         str(e.id),
+                "sistema_cardiovascular":     getattr(e, 'sistema_cardiovascular', None),
+                "sistema_respiratorio":       getattr(e, 'sistema_respiratorio', None),
+                "sistema_digestivo":          getattr(e, 'sistema_digestivo', None),
+                "sistema_neurologico":        getattr(e, 'sistema_neurologico', None),
+                "sistema_genitourinario":     getattr(e, 'sistema_genitourinario', None),
                 "sistema_musculoesqueletico": getattr(e, 'sistema_musculoesqueletico', None),
-                "sistema_integumentario":   getattr(e, 'sistema_integumentario', None),
-                "sistema_endocrino":        getattr(e, 'sistema_endocrino', None),
-                "cabeza_cuello":            getattr(e, 'cabeza_cuello', None),
-                "extremidades":             getattr(e, 'extremidades', None),
-                "observaciones_generales":  getattr(e, 'observaciones_generales', None),
+                "sistema_integumentario":     getattr(e, 'sistema_integumentario', None),
+                "sistema_endocrino":          getattr(e, 'sistema_endocrino', None),
+                "cabeza_cuello":              getattr(e, 'cabeza_cuello', None),
+                "extremidades":               getattr(e, 'extremidades', None),
+                "observaciones_generales":    getattr(e, 'observaciones_generales', None),
             }
     except Exception as e:
         print(f"Advertencia obtener_exploracion_fisica: {e}")
@@ -142,13 +138,12 @@ def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
         }
 
     return {
-        "id":           str(h.id),
-        "deportista_id":str(h.deportista_id),
+        "id":            str(h.id),
+        "deportista_id": str(h.deportista_id),
         "fecha_apertura": str(h.fecha_apertura) if h.fecha_apertura else None,
-        "estado_id":    str(h.estado_id) if h.estado_id else None,
-        "created_at":   str(h.created_at) if h.created_at else None,
-        "deportista":   deportista_data,
-
+        "estado_id":     str(h.estado_id) if h.estado_id else None,
+        "created_at":    str(h.created_at) if h.created_at else None,
+        "deportista":    deportista_data,
         "antecedentes_personales": [
             {"id": str(a.id), "codigo_cie11": a.codigo_cie11,
              "nombre_enfermedad": a.nombre_enfermedad,
@@ -205,15 +200,15 @@ def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
         ],
         "signos_vitales": [
             {"id": str(sv.id),
-             "estatura_cm":                  getattr(sv,'estatura_cm',None),
-             "peso_kg":                      getattr(sv,'peso_kg',None),
-             "imc":                          getattr(sv,'imc',None),
-             "frecuencia_cardiaca_lpm":      getattr(sv,'frecuencia_cardiaca_lpm',None),
-             "presion_arterial_sistolica":   getattr(sv,'presion_arterial_sistolica',None),
-             "presion_arterial_diastolica":  getattr(sv,'presion_arterial_diastolica',None),
-             "frecuencia_respiratoria_rpm":  getattr(sv,'frecuencia_respiratoria_rpm',None),
-             "temperatura_celsius":          getattr(sv,'temperatura_celsius',None),
-             "saturacion_oxigeno_percent":   getattr(sv,'saturacion_oxigeno_percent',None)}
+             "estatura_cm":                 getattr(sv,'estatura_cm',None),
+             "peso_kg":                     getattr(sv,'peso_kg',None),
+             "imc":                         getattr(sv,'imc',None),
+             "frecuencia_cardiaca_lpm":     getattr(sv,'frecuencia_cardiaca_lpm',None),
+             "presion_arterial_sistolica":  getattr(sv,'presion_arterial_sistolica',None),
+             "presion_arterial_diastolica": getattr(sv,'presion_arterial_diastolica',None),
+             "frecuencia_respiratoria_rpm": getattr(sv,'frecuencia_respiratoria_rpm',None),
+             "temperatura_celsius":         getattr(sv,'temperatura_celsius',None),
+             "saturacion_oxigeno_percent":  getattr(sv,'saturacion_oxigeno_percent',None)}
             for sv in (getattr(h,'signos_vitales',None) or [])
         ],
         "pruebas_complementarias": [
@@ -225,11 +220,11 @@ def obtener_datos_historia_completa(db: Session, historia_id: str) -> dict:
         ],
         "diagnosticos": [
             {"id": str(d.id), "codigo_cie11": d.codigo_cie11,
-             "nombre_enfermedad":    d.nombre_enfermedad,
-             "observaciones":        getattr(d,'observaciones',None),
-             "analisis_objetivo":    getattr(d,'analisis_objetivo',None),
-             "impresion_diagnostica":getattr(d,'impresion_diagnostica',None),
-             "tipo_diagnostico":     getattr(d,'tipo_diagnostico',None)}
+             "nombre_enfermedad":     d.nombre_enfermedad,
+             "observaciones":         getattr(d,'observaciones',None),
+             "analisis_objetivo":     getattr(d,'analisis_objetivo',None),
+             "impresion_diagnostica": getattr(d,'impresion_diagnostica',None),
+             "tipo_diagnostico":      getattr(d,'tipo_diagnostico',None)}
             for d in (h.diagnosticos or [])
         ],
         "plan_tratamiento": [
@@ -263,27 +258,49 @@ def _parsear_secciones(secciones_str: Optional[str]) -> Optional[List[str]]:
     return validas or None
 
 
-def _obtener_medico(db: Session, historia: HistoriaClinica):
-    """Obtiene nombre y firma del médico asociado a la historia."""
+def _obtener_medico(db: Session, historia: HistoriaClinica, current_user=None):
+    """
+    Obtiene nombre y firma del médico asociado a la historia.
+    Prioridad 1: medico_id guardado en la historia (historias nuevas).
+    Prioridad 2: current_user del token JWT (historias antiguas sin medico_id).
+    """
     firma_imagen  = None
     nombre_medico = None
+
+    # Prioridad 1 — médico guardado en la historia
     try:
         medico_id = getattr(historia, 'medico_id', None) or getattr(historia, 'profesional_id', None)
         if medico_id:
             medico = db.query(Usuario).filter(Usuario.id == medico_id).first()
             if medico:
                 nombre_medico = medico.nombre_completo
-                # Soporta firma_imagen y firma_base64
-                firma_imagen = (
+                firma_imagen  = (
                     getattr(medico, 'firma_imagen', None)
                     or getattr(medico, 'firma_base64', None)
                 )
     except Exception as e:
-        print(f"Advertencia _obtener_medico: {e}")
+        print(f"Advertencia _obtener_medico (medico_id): {e}")
+
+    # Prioridad 2 — usuario logueado (fallback para historias antiguas)
+    if not nombre_medico and current_user:
+        try:
+            nombre_medico = current_user.nombre_completo
+            firma_imagen  = (
+                getattr(current_user, 'firma_imagen', None)
+                or getattr(current_user, 'firma_base64', None)
+            )
+        except Exception as e:
+            print(f"Advertencia _obtener_medico (current_user): {e}")
+
     return firma_imagen, nombre_medico
 
 
-def _obtener_datos_para_pdf(db: Session, historia_id: str, secciones: Optional[List[str]] = None):
+def _obtener_datos_para_pdf(
+    db: Session,
+    historia_id: str,
+    secciones: Optional[List[str]] = None,
+    current_user=None,                          # ← NUEVO parámetro
+):
     historia = db.query(HistoriaClinica).filter(HistoriaClinica.id == historia_id).first()
     if not historia:
         raise HTTPException(status_code=404, detail="Historia clinica no encontrada")
@@ -311,18 +328,13 @@ def _obtener_datos_para_pdf(db: Session, historia_id: str, secciones: Optional[L
         "grupo_sanguineo":  getattr(deportista,'grupo_sanguineo',None),
     }
 
-    firma_imagen, nombre_medico = _obtener_medico(db, historia)
+    firma_imagen, nombre_medico = _obtener_medico(db, historia, current_user)  # ← pasa current_user
     return datos_completos, deportista_data, deportista, historia, firma_imagen, nombre_medico
 
 
 def _generar_pdf_response(
-    datos_completos: dict,
-    deportista_data: dict,
-    deportista,
-    historia_id: str,
-    inline: bool = False,
-    firma_imagen: str = None,
-    nombre_medico: str = None,
+    datos_completos, deportista_data, deportista,
+    historia_id, inline=False, firma_imagen=None, nombre_medico=None,
 ):
     pdf_buffer = generar_documento_historia_clinica(
         datos_completos, deportista_data,
@@ -335,18 +347,35 @@ def _generar_pdf_response(
         iter([pdf_buffer.getvalue()]),
         media_type="application/pdf",
         headers={
-            "Content-Disposition":          f"{disposition}; filename={filename}",
+            "Content-Disposition":           f"{disposition}; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+def _respuesta_doc(pdf_buffer, nombre_archivo: str, inline: bool = False):
+    disposition = "inline" if inline else "attachment"
+    pdf_buffer.seek(0)
+    return StreamingResponse(
+        iter([pdf_buffer.getvalue()]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":           f"{disposition}; filename={nombre_archivo}",
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
 
 
 # =============================================================================
-# ENDPOINTS
+# ENDPOINTS — todos reciben current_user para fallback de firma
 # =============================================================================
 
 @router.get("/{historia_id}/datos-completos")
-def obtener_datos_completos_json(historia_id: str, db: Session = Depends(get_db)):
+def obtener_datos_completos_json(
+    historia_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     try:
         datos = obtener_datos_historia_completa(db, historia_id)
         if not datos:
@@ -366,10 +395,13 @@ def descargar_historia_clinica_pdf(
     historia_id: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         return _generar_pdf_response(datos, dep_data, dep, historia_id,
                                      inline=False, firma_imagen=firma, nombre_medico=medico)
     except HTTPException:
@@ -384,10 +416,13 @@ def compartir_historia_clinica_pdf(
     historia_id: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         return _generar_pdf_response(datos, dep_data, dep, historia_id,
                                      inline=True, firma_imagen=firma, nombre_medico=medico)
     except HTTPException:
@@ -402,10 +437,13 @@ def imprimir_historia_clinica(
     historia_id: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         return _generar_pdf_response(datos, dep_data, dep, historia_id,
                                      inline=True, firma_imagen=firma, nombre_medico=medico)
     except HTTPException:
@@ -420,10 +458,13 @@ def descargar_pdf_para_whatsapp(
     historia_id: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         pdf_buffer = generar_documento_historia_clinica(
             datos, dep_data, firma_imagen=firma, nombre_medico=medico,
         )
@@ -448,12 +489,15 @@ def enviar_historia_por_email(
     email_destino: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     if not EMAIL_SERVICE_DISPONIBLE:
         raise HTTPException(status_code=503, detail="Servicio de email no configurado")
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         pdf_buffer = generar_documento_historia_clinica(
             datos, dep_data, firma_imagen=firma, nombre_medico=medico,
         )
@@ -490,22 +534,7 @@ def enviar_historia_por_email(
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-# =============================================================================
-# HELPER para los 3 nuevos tipos de documento
-# =============================================================================
-def _respuesta_doc(pdf_buffer, nombre_archivo: str, inline: bool = False):
-    disposition = "inline" if inline else "attachment"
-    pdf_buffer.seek(0)
-    return StreamingResponse(
-        iter([pdf_buffer.getvalue()]),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"{disposition}; filename={nombre_archivo}",
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
-    )
- 
- 
+
 # =============================================================================
 # EPICRISIS
 # =============================================================================
@@ -513,12 +542,14 @@ def _respuesta_doc(pdf_buffer, nombre_archivo: str, inline: bool = False):
 @router.get("/{historia_id}/epicrisis")
 def descargar_epicrisis(
     historia_id: str,
-    inline: bool = Query(False, description="True para ver en navegador, False para descargar"),
+    inline: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """Generar PDF de epicrisis (resumen de consulta / egreso)."""
     try:
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, None, current_user
+        )
         pdf_buffer = generar_epicrisis(
             datos, dep_data, firma_imagen=firma, nombre_medico=medico,
         )
@@ -529,8 +560,8 @@ def descargar_epicrisis(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al generar epicrisis: {str(e)}")
- 
- 
+
+
 # =============================================================================
 # RECETA MÉDICA
 # =============================================================================
@@ -541,10 +572,12 @@ def descargar_receta_medica(
     historia_id: str,
     inline: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """Generar PDF de receta médica con medicamentos prescritos."""
     try:
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, None, current_user
+        )
         pdf_buffer = generar_receta_medica(
             datos, dep_data, firma_imagen=firma, nombre_medico=medico,
         )
@@ -555,8 +588,8 @@ def descargar_receta_medica(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al generar receta: {str(e)}")
- 
- 
+
+
 # =============================================================================
 # INTERCONSULTA / REMISIÓN
 # =============================================================================
@@ -565,16 +598,15 @@ def descargar_receta_medica(
 @router.get("/{historia_id}/remision-pdf")
 def descargar_interconsulta(
     historia_id: str,
-    remision_idx: int = Query(0, description="Índice de la remisión (0 = primera, 1 = segunda, etc.)"),
+    remision_idx: int = Query(0),
     inline: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """
-    Generar PDF de interconsulta / remisión formal a especialista.
-    Si hay varias remisiones, usar remision_idx para seleccionar cuál.
-    """
     try:
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, None, current_user
+        )
         pdf_buffer = generar_interconsulta(
             datos, dep_data,
             firma_imagen=firma, nombre_medico=medico,
@@ -587,49 +619,37 @@ def descargar_interconsulta(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al generar interconsulta: {str(e)}")
- 
- 
+
+
 # =============================================================================
-# RESUMEN DE DOCUMENTOS DISPONIBLES (útil para el frontend)
+# DOCUMENTOS DISPONIBLES
 # =============================================================================
 @router.get("/{historia_id}/documentos-disponibles")
-def listar_documentos_disponibles(historia_id: str, db: Session = Depends(get_db)):
-    """
-    Retorna la lista de documentos PDF disponibles para una historia,
-    con sus URLs directas. El frontend usa esto para mostrar los botones.
-    """
+def listar_documentos_disponibles(
+    historia_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     base = f"/api/v1/documentos/{historia_id}"
     return {
         "historia_id": historia_id,
         "documentos": [
-            {
-                "tipo": "historia_clinica",
-                "nombre": "Historia Clínica Completa",
-                "descripcion": "Todos los datos de la consulta",
-                "url_descarga": f"{base}/historia-clinica-pdf",
-                "url_vista": f"{base}/compartir-pdf",
-            },
-            {
-                "tipo": "epicrisis",
-                "nombre": "Epicrisis",
-                "descripcion": "Resumen de egreso: diagnóstico, plan al alta y próxima cita",
-                "url_descarga": f"{base}/epicrisis-pdf",
-                "url_vista": f"{base}/epicrisis-pdf?inline=true",
-            },
-            {
-                "tipo": "receta",
-                "nombre": "Receta Médica",
-                "descripcion": "Prescripción de medicamentos con dosis y frecuencia",
-                "url_descarga": f"{base}/receta-pdf",
-                "url_vista": f"{base}/receta-pdf?inline=true",
-            },
-            {
-                "tipo": "interconsulta",
-                "nombre": "Interconsulta / Remisión",
-                "descripcion": "Solicitud formal de valoración por especialista",
-                "url_descarga": f"{base}/interconsulta-pdf",
-                "url_vista": f"{base}/interconsulta-pdf?inline=true",
-            },
+            {"tipo": "historia_clinica", "nombre": "Historia Clínica Completa",
+             "descripcion": "Todos los datos de la consulta",
+             "url_descarga": f"{base}/historia-clinica-pdf",
+             "url_vista":    f"{base}/compartir-pdf"},
+            {"tipo": "epicrisis", "nombre": "Epicrisis",
+             "descripcion": "Resumen de egreso: diagnóstico, plan al alta y próxima cita",
+             "url_descarga": f"{base}/epicrisis-pdf",
+             "url_vista":    f"{base}/epicrisis-pdf?inline=true"},
+            {"tipo": "receta", "nombre": "Receta Médica",
+             "descripcion": "Prescripción de medicamentos con dosis y frecuencia",
+             "url_descarga": f"{base}/receta-pdf",
+             "url_vista":    f"{base}/receta-pdf?inline=true"},
+            {"tipo": "interconsulta", "nombre": "Interconsulta / Remisión",
+             "descripcion": "Solicitud formal de valoración por especialista",
+             "url_descarga": f"{base}/interconsulta-pdf",
+             "url_vista":    f"{base}/interconsulta-pdf?inline=true"},
         ],
     }
 
@@ -639,10 +659,13 @@ def obtener_pdf_base64(
     historia_id: str,
     secciones: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
         secs = _parsear_secciones(secciones)
-        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(db, historia_id, secs)
+        datos, dep_data, dep, historia, firma, medico = _obtener_datos_para_pdf(
+            db, historia_id, secs, current_user
+        )
         pdf_buffer = generar_documento_historia_clinica(
             datos, dep_data, firma_imagen=firma, nombre_medico=medico,
         )
